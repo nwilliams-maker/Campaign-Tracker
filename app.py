@@ -71,7 +71,7 @@ def _load_bundle():
         st.write(f"✓ {kiosk_count} campaign-kiosks")
 
         status.update(label="[6/7] Pulling open Onfleet tasks + worker directory...")
-        open_tasks = data.fetch_open_tasks(_progress=st.write)
+        open_tasks = data.fetch_open_tasks()
         workers = data.fetch_workers()
         of_by_kid = data.index_open_tasks_by_kid(open_tasks)
         of_by_sio = data.index_open_tasks_by_sio(open_tasks)
@@ -86,7 +86,7 @@ def _load_bundle():
                     kid_universe.add(k)
 
         status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks, Sept 2025+) — slowest step, give it 1-2 min...")
-        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), _progress=st.write)
+        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)))
         photos_by_kid = data.index_photos_by_kid(completed)
         photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
         st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
