@@ -32,11 +32,32 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
 [data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
-.block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
-.stApp { background: #f5f5f7; font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif !important; }
-section[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.12); }
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+  background: #f5f5f7 !important;
+  color: #212121 !important;
+  font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+}
+.block-container { padding-top: 16px !important; padding-bottom: 0 !important; max-width: 1700px !important; margin: 0 auto !important; }
+section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid rgba(0,0,0,0.12); }
 section[data-testid="stSidebar"] button { background: #5300B2 !important; color: #fff !important; border: none !important; }
 section[data-testid="stSidebar"] button:hover { background: #6a1ed1 !important; }
+/* Status block — Streamlit defaults to white/light text, force dark on light bg */
+[data-testid="stStatus"], [data-testid="stStatusContainer"], details {
+  background: #ffffff !important; color: #212121 !important;
+  border: 1px solid rgba(0,0,0,0.12) !important; border-radius: 6px !important;
+  padding: 10px 16px !important; font-size: 14px !important;
+}
+[data-testid="stStatus"] *, [data-testid="stStatusContainer"] *, details * {
+  color: #212121 !important;
+}
+[data-testid="stStatus"] summary, details summary {
+  color: #5300B2 !important; font-weight: 600 !important;
+}
+[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] {
+  color: #212121 !important;
+}
+.stAlert, [data-testid="stAlertContainer"] { color: #212121 !important; }
+h1, h2, h3, h4, h5, h6 { color: #212121 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -88,8 +109,8 @@ def _load_bundle():
                 if k:
                     kid_universe.add(k)
 
-        status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks, Sept 2025+) — slowest step, give it 1-2 min...")
-        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)))
+        status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks, Sept 2025+) — capped at 400 pages, ~2-3 min...")
+        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), max_pages=400)
         photos_by_kid = data.index_photos_by_kid(completed)
         photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
         st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
