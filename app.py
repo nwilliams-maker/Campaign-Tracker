@@ -133,7 +133,7 @@ def _load_bundle():
                     if k:
                         kid_universe.add(k)
             status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks) — slow, ~2 min...")
-            completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), max_pages=400)
+            completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), max_pages=250, _progress=st.write)
             photos_by_kid = data.index_photos_by_kid(completed)
             photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
             st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
@@ -305,22 +305,19 @@ if st.sidebar.button("🔄 Refresh ALL data (clears cache)"):
     st.rerun()
 
 # --- Load data ---------------------------------------------------------------
-# --- Photo loader UI (visible in the main view) ---
-photo_col1, photo_col2 = st.columns([3, 1])
-with photo_col1:
-    if st.session_state.get("load_photos", False):
-        st.success("📷 Photo history is loaded — every kiosk row's expanded panel will show its install photos.")
-    else:
-        st.info("📷 Photo history NOT loaded yet. Click \u2192 to pull all install photos since Sept 2025 (~2 min). Other data already loaded.")
-with photo_col2:
+# --- Photo loader UI: button shown FIRST so user can trigger the load.
+# Status banner is rendered AFTER the load completes so it reflects reality.
+photo_btn_col1, photo_btn_col2 = st.columns([3, 1])
+with photo_btn_col2:
     if not st.session_state.get("load_photos", False):
-        if st.button("📷 Load photos now", use_container_width=True, type="primary"):
+        if st.button("📷 Load photos now (~2 min)", use_container_width=True, type="primary", key="load_photos_btn"):
             st.session_state["load_photos"] = True
             st.rerun()
     else:
-        if st.button("🚫 Drop photos", use_container_width=True):
+        if st.button("🚫 Drop loaded photos", use_container_width=True, key="drop_photos_btn"):
             st.session_state["load_photos"] = False
-            data.fetch_completed_tasks_for_kids.clear()
+            try: data.fetch_completed_tasks_for_kids.clear()
+            except Exception: pass
             st.rerun()
 
 try:
@@ -329,6 +326,17 @@ try:
 except Exception as e:
     st.error(f"Failed to load data: {e}")
     st.stop()
+
+# Now we know the actual photo state — render an honest banner.
+photo_n = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values()) if photos_by_kid else 0
+kiosk_n = len(photos_by_kid) if photos_by_kid else 0
+with photo_btn_col1:
+    if photo_n > 0:
+        st.success(f"📷 Photo history loaded — {photo_n} photos across {kiosk_n} kiosks. Expand any row to see them.")
+    elif st.session_state.get("load_photos", False):
+        st.warning("📷 Photo load ran but found no matching photos. (None of our active-pipeline kiosks have completed Onfleet tasks with photos since Sept 2025.)")
+    else:
+        st.info("📷 Photo history NOT loaded yet. Click → to pull every kiosk's install-photo history (~2 min, runs only on first click).")
 
 # --- KPIs ---------------------------------------------------------------------
 total = len(rows)
