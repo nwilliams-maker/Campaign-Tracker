@@ -298,17 +298,31 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
 
 
 # --- Sidebar / refresh -------------------------------------------------------
-st.sidebar.checkbox(
-    "Load photo history (slow, ~2 min)",
-    key="load_photos",
-    value=False,
-    help="Pulls all completed Onfleet tasks since Sept 2025 to build a per-kiosk photo gallery. Off by default for fast loads.",
-)
-if st.sidebar.button("🔄 Refresh data now"):
+# Sidebar just has the master refresh
+if st.sidebar.button("🔄 Refresh ALL data (clears cache)"):
     st.cache_data.clear()
+    st.session_state["load_photos"] = False
     st.rerun()
 
 # --- Load data ---------------------------------------------------------------
+# --- Photo loader UI (visible in the main view) ---
+photo_col1, photo_col2 = st.columns([3, 1])
+with photo_col1:
+    if st.session_state.get("load_photos", False):
+        st.success("📷 Photo history is loaded — every kiosk row's expanded panel will show its install photos.")
+    else:
+        st.info("📷 Photo history NOT loaded yet. Click \u2192 to pull all install photos since Sept 2025 (~2 min). Other data already loaded.")
+with photo_col2:
+    if not st.session_state.get("load_photos", False):
+        if st.button("📷 Load photos now", use_container_width=True, type="primary"):
+            st.session_state["load_photos"] = True
+            st.rerun()
+    else:
+        if st.button("🚫 Drop photos", use_container_width=True):
+            st.session_state["load_photos"] = False
+            data.fetch_completed_tasks_for_kids.clear()
+            st.rerun()
+
 try:
     bundle = _load_bundle()
     rows, photos_by_kid = build_rows(bundle)
