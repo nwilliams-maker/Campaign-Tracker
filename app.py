@@ -42,7 +42,10 @@ section[data-testid="stSidebar"] button:hover { background: #6a1ed1 !important; 
 
 
 # --- Data load ---------------------------------------------------------------
-@st.cache_data(ttl=300, show_spinner=False)
+# NOTE: deliberately NOT @st.cache_data — Streamlit suppresses UI side effects
+# (st.status, st.write) inside cached functions, which made the page look frozen.
+# The individual fetchers in data.py are each @st.cache_data, so reruns of this
+# wrapper are still fast on cache hit (just function returns, no API calls).
 def _load_bundle():
     """Pulls everything in stages, showing progress for each. Cached for 5 min,
     so this body only runs on cache miss — subsequent loads are instant."""
