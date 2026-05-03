@@ -101,19 +101,24 @@ def _load_bundle():
         of_by_sio = data.index_open_tasks_by_sio(open_tasks)
         st.write(f"✓ {len(open_tasks)} open Onfleet tasks · {len(workers)} workers in directory")
 
-        # Build kid universe for the photo-history pull
-        kid_universe = set()
-        for cks in kiosks_by_cid.values():
-            for ck in cks or []:
-                k = ((ck.get("kiosk") or {}).get("importKioskId") or "").strip().upper()
-                if k:
-                    kid_universe.add(k)
-
-        status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks, Sept 2025+) — capped at 400 pages, ~2-3 min...")
-        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), max_pages=400)
-        photos_by_kid = data.index_photos_by_kid(completed)
-        photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
-        st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
+        # Step 7 (photo history) is OPT-IN — too slow for first load.
+        # Toggle the sidebar checkbox to enable it for the next refresh.
+        if st.session_state.get("load_photos", False):
+            kid_universe = set()
+            for cks in kiosks_by_cid.values():
+                for ck in cks or []:
+                    k = ((ck.get("kiosk") or {}).get("importKioskId") or "").strip().upper()
+                    if k:
+                        kid_universe.add(k)
+            status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks) — slow, ~2 min...")
+            completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)), max_pages=400)
+            photos_by_kid = data.index_photos_by_kid(completed)
+            photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
+            st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
+        else:
+            completed = []
+            photos_by_kid = {}
+            st.write("⊘ Photo history skipped (toggle 'Load photos' in sidebar to enable — adds ~2 min)")
 
         status.update(label="✓ Loaded", state="complete", expanded=False)
 
@@ -249,6 +254,12 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
 
 
 # --- Sidebar / refresh -------------------------------------------------------
+st.sidebar.checkbox(
+    "Load photo history (slow, ~2 min)",
+    key="load_photos",
+    value=False,
+    help="Pulls all completed Onfleet tasks since Sept 2025 to build a per-kiosk photo gallery. Off by default for fast loads.",
+)
 if st.sidebar.button("🔄 Refresh data now"):
     st.cache_data.clear()
     st.rerun()
