@@ -30,9 +30,13 @@ st.set_page_config(
 # Hide Streamlit's chrome
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
 [data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
 .block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
-.stApp { background: #0b1220; }
+.stApp { background: #f5f5f7; font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif !important; }
+section[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.12); }
+section[data-testid="stSidebar"] button { background: #5300B2 !important; color: #fff !important; border: none !important; }
+section[data-testid="stSidebar"] button:hover { background: #6a1ed1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -40,7 +44,68 @@ st.markdown("""
 # --- Data load ---------------------------------------------------------------
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_bundle():
-    return data.fetch_all()
+    """Pulls everything in stages, showing progress for each. Cached for 5 min,
+    so this body only runs on cache miss — subsequent loads are instant."""
+    with st.status("Loading data — first load takes 2-3 min...", expanded=True) as status:
+        status.update(label="[1/7] Logging in to Terraboost + fetching status names...")
+        status_names = data.fetch_status_names()
+        st.write(f"✓ {len(status_names)} status types")
+
+        status.update(label="[2/7] Fetching active-pipeline campaigns (status 6/8/9/90)...")
+        campaigns = data.fetch_active_campaigns()
+        st.write(f"✓ {len(campaigns)} campaigns in active install pipeline")
+        cids = tuple(c["id"] for c in campaigns)
+
+        status.update(label="[3/7] Fetching art-approved dates (Sept 2025+ logs)...")
+        art_dates = data.fetch_art_approved_dates()
+        st.write(f"✓ {len(art_dates)} campaigns with art-approved log entries")
+
+        status.update(label="[4/7] Fetching status timelines for active campaigns...")
+        all_logs = data.fetch_all_logs(cids)
+        log_count = sum(len(v) for v in all_logs.values())
+        st.write(f"✓ {log_count} status-log entries across {len(all_logs)} campaigns")
+
+        status.update(label=f"[5/7] Fetching kiosks for {len(campaigns)} campaigns (in batches of 50)...")
+        kiosks_by_cid = data.fetch_kiosks_for_campaigns(cids)
+        kiosk_count = sum(len(v or []) for v in kiosks_by_cid.values())
+        st.write(f"✓ {kiosk_count} campaign-kiosks")
+
+        status.update(label="[6/7] Pulling open Onfleet tasks + worker directory...")
+        open_tasks = data.fetch_open_tasks()
+        workers = data.fetch_workers()
+        of_by_kid = data.index_open_tasks_by_kid(open_tasks)
+        of_by_sio = data.index_open_tasks_by_sio(open_tasks)
+        st.write(f"✓ {len(open_tasks)} open Onfleet tasks · {len(workers)} workers in directory")
+
+        # Build kid universe for the photo-history pull
+        kid_universe = set()
+        for cks in kiosks_by_cid.values():
+            for ck in cks or []:
+                k = ((ck.get("kiosk") or {}).get("importKioskId") or "").strip().upper()
+                if k:
+                    kid_universe.add(k)
+
+        status.update(label=f"[7/7] Pulling completed Onfleet tasks for photo history ({len(kid_universe)} kiosks, Sept 2025+)...")
+        completed = data.fetch_completed_tasks_for_kids(tuple(sorted(kid_universe)))
+        photos_by_kid = data.index_photos_by_kid(completed)
+        photo_count = sum(sum(len(e["ids"]) for e in lst) for lst in photos_by_kid.values())
+        st.write(f"✓ {len(completed)} completed tasks · {photo_count} photos across {len(photos_by_kid)} kiosks")
+
+        status.update(label="✓ Loaded", state="complete", expanded=False)
+
+    return {
+        "status_names": status_names,
+        "campaigns": campaigns,
+        "art_dates": art_dates,
+        "all_logs": all_logs,
+        "kiosks_by_cid": kiosks_by_cid,
+        "of_by_kid": of_by_kid,
+        "of_by_sio": of_by_sio,
+        "workers": workers,
+        "photos_by_kid": photos_by_kid,
+        "open_task_count": len(open_tasks),
+        "completed_task_count": len(completed),
+    }
 
 
 def build_rows(bundle: dict) -> tuple[list, dict]:
@@ -165,13 +230,12 @@ if st.sidebar.button("🔄 Refresh data now"):
     st.rerun()
 
 # --- Load data ---------------------------------------------------------------
-with st.spinner("Loading campaign data…"):
-    try:
-        bundle = _load_bundle()
-        rows, photos_by_kid = build_rows(bundle)
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        st.stop()
+try:
+    bundle = _load_bundle()
+    rows, photos_by_kid = build_rows(bundle)
+except Exception as e:
+    st.error(f"Failed to load data: {e}")
+    st.stop()
 
 # --- KPIs ---------------------------------------------------------------------
 total = len(rows)
