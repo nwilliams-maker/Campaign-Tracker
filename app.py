@@ -30,34 +30,33 @@ st.set_page_config(
 # Hide Streamlit's chrome
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 [data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
 html, body, .stApp, [data-testid="stAppViewContainer"] {
-  background: #f5f5f7 !important;
-  color: #212121 !important;
-  font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  font-family: 'Inter', -apple-system, sans-serif !important;
 }
-.block-container { padding-top: 16px !important; padding-bottom: 0 !important; max-width: 1700px !important; margin: 0 auto !important; }
-section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid rgba(0,0,0,0.12); }
-section[data-testid="stSidebar"] button { background: #5300B2 !important; color: #fff !important; border: none !important; }
-section[data-testid="stSidebar"] button:hover { background: #6a1ed1 !important; }
-/* Status block — Streamlit defaults to white/light text, force dark on light bg */
-[data-testid="stStatus"], [data-testid="stStatusContainer"], details {
-  background: #ffffff !important; color: #212121 !important;
-  border: 1px solid rgba(0,0,0,0.12) !important; border-radius: 6px !important;
-  padding: 10px 16px !important; font-size: 14px !important;
+.block-container { padding-top: 12px !important; padding-bottom: 0 !important; max-width: 1700px !important; margin: 0 auto !important; }
+section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #cbd5e1 !important; }
+section[data-testid="stSidebar"] button { background: #633094 !important; color: #fff !important; border: none !important; box-shadow: 0 2px 8px rgba(99,48,148,0.3); }
+section[data-testid="stSidebar"] button:hover { background: #4c2671 !important; }
+/* Status block: light card, dark text */
+[data-testid="stStatus"], [data-testid="stStatusContainer"], details, .stStatus {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
 }
-[data-testid="stStatus"] *, [data-testid="stStatusContainer"] *, details * {
-  color: #212121 !important;
-}
-[data-testid="stStatus"] summary, details summary {
-  color: #5300B2 !important; font-weight: 600 !important;
-}
-[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] {
-  color: #212121 !important;
-}
-.stAlert, [data-testid="stAlertContainer"] { color: #212121 !important; }
-h1, h2, h3, h4, h5, h6 { color: #212121 !important; }
+[data-testid="stStatus"] *, [data-testid="stStatusContainer"] *, details *, .stStatus * { color: #0f172a !important; }
+[data-testid="stStatus"] summary, details summary { color: #633094 !important; font-weight: 600 !important; }
+[data-testid="stMarkdownContainer"] *, .stMarkdown * { color: #0f172a !important; }
+[data-testid="stMarkdownContainer"] h3 { font-size: 16px !important; font-weight: 700 !important; margin: 6px 0 8px !important; color: #0f172a !important; }
+.stAlert, [data-testid="stAlertContainer"] { color: #0f172a !important; }
+h1, h2, h3, h4, h5, h6 { color: #0f172a !important; }
 </style>
 """, unsafe_allow_html=True)
 
