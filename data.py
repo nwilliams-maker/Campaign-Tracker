@@ -244,7 +244,7 @@ def fetch_workers() -> dict:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_open_tasks() -> list:
+def fetch_open_tasks(_progress=None) -> list:
     """state 0=unassigned, 1=assigned, 2=active."""
     headers = _onfleet_headers()
     out, last, page = [], None, 0
@@ -258,13 +258,16 @@ def fetch_open_tasks() -> list:
         tasks = body.get("tasks") or []
         out.extend(tasks)
         last = body.get("lastId")
+        if _progress and (page % 10 == 0 or not last or not tasks):
+            try: _progress(f"  · page {page} → {len(out)} tasks so far")
+            except Exception: pass
         if not last or not tasks or page > 200:
             break
     return out
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_completed_tasks_for_kids(kids: tuple, max_pages: int = 2000) -> list:
+def fetch_completed_tasks_for_kids(kids: tuple, max_pages: int = 2000, _progress=None) -> list:
     """Pull state=3 tasks since CUTOFF, keep only those whose kioskId is in kids."""
     needed = {str(k).strip().upper() for k in kids if k}
     if not needed:
@@ -283,6 +286,9 @@ def fetch_completed_tasks_for_kids(kids: tuple, max_pages: int = 2000) -> list:
             if _kid_of(t) in needed:
                 out.append(t)
         last = body.get("lastId")
+        if _progress and (page % 20 == 0 or not last or not tasks):
+            try: _progress(f"  · page {page} → kept {len(out)} matching photos")
+            except Exception: pass
         if not last or not tasks or page > max_pages:
             break
     return out
