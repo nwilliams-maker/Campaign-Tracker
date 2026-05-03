@@ -136,6 +136,43 @@
   .pod-Red { background:#fee2e2; color:#b91c1c; }
   .pod-Other { background:#e2e8f0; color:#475569; }
 
+
+  /* Hover-blowup: thumbnail shows enlarged version on hover, no click needed */
+  .photo-thumb { position: relative; display: inline-block; }
+  .photo-thumb img.thumb { height: 60px; width: 60px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); transition: border-color 0.15s; }
+  .photo-thumb:hover img.thumb { border-color: var(--primary); }
+  .photo-thumb img.blowup {
+    display: none; position: absolute; left: 70px; top: -20px;
+    width: 480px; max-width: 80vw; max-height: 70vh; object-fit: contain;
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25); background: var(--surface);
+    z-index: 1000;
+  }
+  .photo-thumb:hover img.blowup { display: block; }
+  /* Push blowups left if near right edge */
+  .photo-thumb.right-edge img.blowup { left: auto; right: 70px; }
+
+  /* Art mockup card with hover-zoom */
+  .art-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    position: relative;
+  }
+  .art-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); font-weight: 600; }
+  .art-card .frame {
+    position: relative; width: 100%; height: 200px; background: var(--surface);
+    border: 1px dashed var(--border); border-radius: 4px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .art-card .frame iframe, .art-card .frame embed {
+    width: 100%; height: 100%; border: 0;
+  }
+  .art-card .frame .nofile { color: var(--text-muted); font-size: 12px; font-style: italic; }
+  .art-card .open-link { font-size: 11px; color: var(--primary); text-decoration: none; }
+  .art-card .open-link:hover { text-decoration: underline; }
+
+  .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
   .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
 </style>
 </head>
@@ -196,10 +233,6 @@
   </div>
 </div>
 
-<div class="lightbox" id="lightbox" onclick="if(event.target.id==='lightbox')closeLightbox()">
-  <span class="lb-close" onclick="closeLightbox()">×</span>
-  <img id="lb-img" src="" />
-  <div class="lb-meta" id="lb-meta"></div>
 </div>
 
 <script>
@@ -291,15 +324,35 @@ function renderTimeline(timeline, artDate) {
 
 function renderPhotos(kid) {
   const events = APP.photos[kid] || [];
-  if (!events.length) return '<div class="photos-empty">No completed Onfleet photos found for this kiosk (Sept 2025+).</div>';
+  if (!events.length) return '<div class="photos-empty">No completed Onfleet photos found for this kiosk (Sept 2025+). Toggle "Load photo history" in sidebar to enable.</div>';
   return events.map(ev => {
     const dt = new Date(ev.dt_iso);
     const when = isNaN(dt) ? ev.dt_iso : dt.toLocaleDateString() + ' · ' + escapeHtml(ev.task_type || 'Task');
     const thumbs = ev.ids.map(id =>
-      `<img src="${photoUrl(id, "100x")}" title="${escapeHtml(when)} (#${escapeHtml(ev.short_id)})" data-id="${escapeHtml(id)}" data-meta="${escapeHtml(when)}" onclick="openLightbox(this)" loading="lazy" />`
+      `<span class="photo-thumb" title="${escapeHtml(when)}${ev.short_id ? ' · #' + escapeHtml(ev.short_id) : ''}">
+         <img class="thumb" src="${photoUrl(id, "100x")}" loading="lazy" />
+         <img class="blowup" src="${photoUrl(id, "800x")}" loading="lazy" />
+       </span>`
     ).join("");
     return `<div class="photo-event"><div class="when">${escapeHtml(when)}${ev.short_id ? ` · #${escapeHtml(ev.short_id)}` : ''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${thumbs}</div></div>`;
   }).join('<div style="width:100%;height:0;"></div>');
+}
+
+function renderArtMockup(r) {
+  function panel(label, url) {
+    if (!url) return `<div class="art-card"><div class="label">${escapeHtml(label)}</div><div class="frame"><span class="nofile">no file</span></div></div>`;
+    const safe = escapeHtml(url);
+    const isPdf = /\.pdf(\?|$)/i.test(url);
+    const inner = isPdf
+      ? `<iframe src="${safe}#toolbar=0&navpanes=0&scrollbar=0" loading="lazy"></iframe>`
+      : `<img src="${safe}" style="max-width:100%;max-height:100%;object-fit:contain;" loading="lazy" />`;
+    return `<div class="art-card">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="frame">${inner}</div>
+      <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
+    </div>`;
+  }
+  return `<div class="art-grid">${panel('Approved Top Art', r.art_top_url)}${panel('Approved Bottom Art', r.art_bottom_url)}</div>`;
 }
 
 function renderAssignments(assignments) {
@@ -343,7 +396,11 @@ function renderRowDrawer(r) {
         </div>
       </div>
       <div class="panel full">
-        <h3>Photo History (Onfleet completed tasks, Sept 2025+)</h3>
+        <h3>Approved Artwork Mockup (from Terraboost)</h3>
+        ${renderArtMockup(r)}
+      </div>
+      <div class="panel full">
+        <h3>Photo History (hover any thumb for blow-up)</h3>
         <div class="photos">${renderPhotos(r.kid)}</div>
       </div>
     </div>`;
@@ -407,7 +464,8 @@ function toggleRow(key) {
   }
 }
 
-function openLightbox(img) {
+function _openLightbox_unused(img) {  // kept for compat, hover replaces this
+  return;
   document.getElementById('lb-img').src = photoUrl(img.dataset.id, "800x");
   document.getElementById('lb-meta').textContent = img.dataset.meta || "";
   document.getElementById('lightbox').classList.add('show');
