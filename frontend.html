@@ -127,6 +127,15 @@
   .lightbox .lb-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; }
   .lightbox .lb-close:hover { color: var(--red-text); }
 
+
+  .pod-pill { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:0.02em; }
+  .pod-Blue { background:#dbeafe; color:#1d4ed8; }
+  .pod-Green { background:#dcfce7; color:#15803d; }
+  .pod-Orange { background:#fed7aa; color:#c2410c; }
+  .pod-Purple { background:#f3e8ff; color:#7e22ce; }
+  .pod-Red { background:#fee2e2; color:#b91c1c; }
+  .pod-Other { background:#e2e8f0; color:#475569; }
+
   .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
 </style>
 </head>
@@ -150,6 +159,13 @@
     <span class="chip" data-filter="assigned">Assigned</span>
     <span class="chip" data-filter="installed">Installed</span>
     <span class="chip" data-filter="not-installed">Not Yet Installed</span>
+    <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <span class="chip pod-chip" data-pod="all">All Pods</span>
+    <span class="chip pod-chip" data-pod="Blue" style="border-color:#3b82f6;color:#3b82f6;">Blue</span>
+    <span class="chip pod-chip" data-pod="Green" style="border-color:#16a34a;color:#16a34a;">Green</span>
+    <span class="chip pod-chip" data-pod="Orange" style="border-color:#ea580c;color:#ea580c;">Orange</span>
+    <span class="chip pod-chip" data-pod="Purple" style="border-color:#9333ea;color:#9333ea;">Purple</span>
+    <span class="chip pod-chip" data-pod="Red" style="border-color:#dc2626;color:#dc2626;">Red</span>
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="text" id="search" placeholder="Search SIO, campaign, KID, venue, worker..." />
@@ -162,6 +178,7 @@
       <thead>
         <tr>
           <th data-sort="onfleet_state">Status</th>
+          <th data-sort="pod">Pod</th>
           <th data-sort="days_since_art_approved" class="num">Days <span class="sort-arrow">▼</span></th>
           <th data-sort="art_approved_date">Art Approved</th>
           <th data-sort="current_status">Terraboost Status</th>
@@ -191,6 +208,7 @@ const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.pn
 function photoUrl(id, size) { return PHOTO_URL_TEMPLATE.replace("{id}", id).replace("{size}", size || "100x"); }
 
 let activeFilter = "all";
+let activePod = "all";
 let searchText = "";
 let sortField = "days_since_art_approved";
 let sortAsc = false;
@@ -226,6 +244,7 @@ function pillFor(state) {
 }
 
 function rowMatchesFilter(r) {
+  if (activePod !== "all" && r.pod !== activePod) return false;
   if (activeFilter === "needs-attention") return r.onfleet_state === "NOT_IN_ONFLEET";
   if (activeFilter === "unassigned") return r.onfleet_state === "unassigned";
   if (activeFilter === "assigned") return r.onfleet_state === "assigned";
@@ -352,6 +371,7 @@ function render() {
     const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
     tr.innerHTML = `
       <td>${pillFor(r.onfleet_state)}${r.install_date ? '<span class="pill installed">installed</span>' : ''}</td>
+      <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
       <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days}</span></td>
       <td>${escapeHtml(r.art_approved_date || '—')}</td>
       <td>${escapeHtml(r.current_status)}</td>
@@ -367,7 +387,7 @@ function render() {
     if (key === expandedKey) {
       const drawerTr = document.createElement('tr');
       drawerTr.className = 'drawer-row';
-      drawerTr.innerHTML = `<td colspan="10">${renderRowDrawer(r)}</td>`;
+      drawerTr.innerHTML = `<td colspan="11">${renderRowDrawer(r)}</td>`;
       frag.appendChild(drawerTr);
     }
   }
@@ -396,11 +416,22 @@ function openLightbox(img) {
 function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
 
 // Wiring
-for (const c of document.querySelectorAll('.chip')) {
+for (const c of document.querySelectorAll('.chip:not(.pod-chip)')) {
   c.addEventListener('click', () => {
-    document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.chip:not(.pod-chip)').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
     activeFilter = c.dataset.filter;
+    expandedKey = null;
+    render();
+  });
+}
+const allPodsChip = document.querySelector('.pod-chip[data-pod="all"]');
+if (allPodsChip) allPodsChip.classList.add('active');
+for (const c of document.querySelectorAll('.pod-chip')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.pod-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activePod = c.dataset.pod;
     expandedKey = null;
     render();
   });
