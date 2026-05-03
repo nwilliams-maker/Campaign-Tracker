@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Campaign Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #0b1220;
+    --card: #111a2e;
+    --card-2: #16223a;
+    --border: #1f2c47;
+    --text: #e8edf5;
+    --text-muted: #9aa6bd;
+    --accent: #4f9bff;
+    --accent-2: #7c5cff;
+    --red: #ff6b6b;
+    --red-bg: rgba(255,107,107,0.15);
+    --yellow: #ffd166;
+    --yellow-bg: rgba(255,209,102,0.15);
+    --green: #4ade80;
+    --green-bg: rgba(74,222,128,0.15);
+    --blue: #60a5fa;
+    --blue-bg: rgba(96,165,250,0.15);
+    --grey: #6b7280;
+    --grey-bg: rgba(107,114,128,0.15);
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; }
+
+  .page { padding: 24px 32px 80px; max-width: 1700px; margin: 0 auto; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+              background: linear-gradient(90deg, #fff, #9aa6bd); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .header .meta { color: var(--text-muted); font-size: 12px; }
+
+  /* KPI cards */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 500; }
+  .kpi .value { font-size: 24px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }
+  .kpi .delta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .kpi.alert .value { color: var(--red); }
+  .kpi.warn .value { color: var(--yellow); }
+  .kpi.good .value { color: var(--green); }
+
+  /* Filter bar */
+  .toolbar { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+             display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none;
+          background: transparent; color: var(--text-muted); border: 1px solid var(--border); transition: all 0.15s ease; }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+  .chip.active { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+  .chip .count { opacity: 0.7; margin-left: 4px; }
+  .search-wrap { flex: 1; min-width: 240px; position: relative; }
+  .search-wrap input { width: 100%; padding: 8px 12px 8px 36px; background: var(--bg); color: var(--text);
+                       border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+  .visible-count { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+
+  /* Table */
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--card-2); color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+             padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: var(--text); }
+  thead th .sort-arrow { display: inline-block; opacity: 0.4; margin-left: 4px; font-size: 9px; }
+  thead th.active .sort-arrow { opacity: 1; color: var(--accent); }
+  tbody tr { cursor: pointer; transition: background 0.1s; }
+  tbody tr:hover { background: var(--card-2); }
+  tbody tr.expanded { background: var(--card-2); }
+  tbody td { padding: 11px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  td .muted { color: var(--text-muted); font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+  /* Status pill */
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }
+  .pill.not-onfleet { background: var(--red-bg); color: var(--red); }
+  .pill.unassigned { background: var(--yellow-bg); color: var(--yellow); }
+  .pill.assigned { background: var(--green-bg); color: var(--green); }
+  .pill.active { background: var(--blue-bg); color: var(--blue); }
+  .pill.installed { background: var(--blue-bg); color: var(--blue); margin-left: 4px; }
+  .pill.boosted { background: rgba(124,92,255,0.15); color: var(--accent-2); margin-left: 4px; }
+
+  /* Days badge */
+  .days { font-weight: 600; }
+  .days.warn { color: var(--yellow); }
+  .days.alert { color: var(--red); }
+
+  /* Expanded row drawer */
+  .drawer-row td { padding: 0 !important; background: var(--bg); }
+  .drawer { padding: 18px 22px; display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 22px; border-top: 2px solid var(--accent); }
+  .drawer h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0 0 10px 0; font-weight: 600; }
+  .drawer .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .drawer .panel.full { grid-column: 1 / -1; }
+  .row-info { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; }
+  .row-info .li { display: flex; flex-direction: column; min-width: 140px; }
+  .row-info .li .k { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+  .row-info .li .v { color: var(--text); font-weight: 500; }
+  .row-info .li .v a { color: var(--accent); text-decoration: none; }
+  .row-info .li .v a:hover { text-decoration: underline; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 18px; }
+  .timeline::before { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline .step { position: relative; margin-bottom: 12px; }
+  .timeline .step:last-child { margin-bottom: 0; }
+  .timeline .step::before { content: ''; position: absolute; left: -18px; top: 5px; width: 10px; height: 10px; border-radius: 50%;
+                            background: var(--accent); border: 2px solid var(--bg); }
+  .timeline .step.art-approved::before { background: var(--green); }
+  .timeline .step .date { font-size: 11px; color: var(--text-muted); }
+  .timeline .step .name { font-size: 13px; font-weight: 500; margin-top: 1px; }
+
+  /* Photos */
+  .photos { display: flex; flex-wrap: wrap; gap: 6px; }
+  .photos img { height: 56px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.1s, border-color 0.15s; }
+  .photos img:hover { transform: scale(1.06); border-color: var(--accent); }
+  .photos .photo-event { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .photos .photo-event .when { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
+  .photos-empty { color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+  /* Assignments */
+  .assignment { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+  .assignment:last-child { border-bottom: none; }
+  .assignment .k { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .assignment .v { color: var(--text); font-size: 13px; font-weight: 500; }
+  .assignment .v.empty { color: var(--text-muted); font-style: italic; font-weight: 400; }
+
+  /* Lightbox */
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 9999;
+              align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 30px; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 80vh; border-radius: 6px; }
+  .lightbox .lb-meta { color: #cbd5e1; font-size: 14px; }
+  .lightbox .lb-close { position: absolute; top: 18px; right: 22px; color: #fff; font-size: 32px; cursor: pointer; line-height: 1; }
+  .lightbox .lb-close:hover { color: var(--red); }
+
+  .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header">
+    <div>
+      <h1>Campaign Tracker</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="meta">Sept 2025 onward · auto-cached 5 min</div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="toolbar">
+    <span class="chip active" data-filter="all">All</span>
+    <span class="chip" data-filter="needs-attention">Needs Attention</span>
+    <span class="chip" data-filter="unassigned">Unassigned WO</span>
+    <span class="chip" data-filter="assigned">Assigned</span>
+    <span class="chip" data-filter="installed">Installed</span>
+    <span class="chip" data-filter="not-installed">Not Yet Installed</span>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="search" placeholder="Search SIO, campaign, KID, venue, worker..." />
+    </div>
+    <span class="visible-count" id="visibleCount"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="onfleet_state">Status</th>
+          <th data-sort="days_since_art_approved" class="num">Days <span class="sort-arrow">▼</span></th>
+          <th data-sort="art_approved_date">Art Approved</th>
+          <th data-sort="current_status">Terraboost Status</th>
+          <th data-sort="sio">SIO</th>
+          <th data-sort="campaign_name">Campaign</th>
+          <th data-sort="kid">KID</th>
+          <th data-sort="venue_name">Venue</th>
+          <th data-sort="venue_state">State</th>
+          <th data-sort="install_date">Installed</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">No matching kiosks.</div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="if(event.target.id==='lightbox')closeLightbox()">
+  <span class="lb-close" onclick="closeLightbox()">×</span>
+  <img id="lb-img" src="" />
+  <div class="lb-meta" id="lb-meta"></div>
+</div>
+
+<script>
+const APP = __APP_DATA__;
+const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.png";
+function photoUrl(id, size) { return PHOTO_URL_TEMPLATE.replace("{id}", id).replace("{size}", size || "100x"); }
+
+let activeFilter = "all";
+let searchText = "";
+let sortField = "days_since_art_approved";
+let sortAsc = false;
+let expandedKey = null;
+
+document.getElementById('meta').textContent = `Last refreshed ${new Date(APP.last_refreshed).toLocaleString()} · ${APP.rows.length} kiosk rows · ${APP.kpis.open_tasks} open Onfleet tasks · ${APP.kpis.completed_tasks} completed (Sept 2025+)`;
+
+function renderKpis() {
+  const k = APP.kpis;
+  const cards = [
+    { label: "Total Kiosks", value: k.total, cls: "" },
+    { label: "Needs Attention", value: k.not_in_of, cls: "alert", delta: "no Onfleet WO" },
+    { label: "Unassigned WO", value: k.unassigned, cls: "warn", delta: "no contractor yet" },
+    { label: "Assigned", value: k.assigned, cls: "good", delta: "contractor accepted" },
+    { label: "Installed", value: k.installed, cls: "", delta: `of ${k.total} total` },
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c => `
+    <div class="kpi ${c.cls}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value.toLocaleString()}</div>
+      ${c.delta ? `<div class="delta">${c.delta}</div>` : ''}
+    </div>`).join('');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function pillFor(state) {
+  const cls = state === "NOT_IN_ONFLEET" ? "not-onfleet" : state.toLowerCase();
+  const label = state === "NOT_IN_ONFLEET" ? "Not in Onfleet" : state;
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function rowMatchesFilter(r) {
+  if (activeFilter === "needs-attention") return r.onfleet_state === "NOT_IN_ONFLEET";
+  if (activeFilter === "unassigned") return r.onfleet_state === "unassigned";
+  if (activeFilter === "assigned") return r.onfleet_state === "assigned";
+  if (activeFilter === "installed") return !!r.install_date;
+  if (activeFilter === "not-installed") return !r.install_date;
+  return true;
+}
+
+function rowMatchesSearch(r) {
+  if (!searchText) return true;
+  const q = searchText.toLowerCase();
+  const fields = [r.sio, r.campaign_name, r.kid, r.venue_name, r.venue_city, r.venue_state, r.current_status];
+  for (const a of (r.assignments || [])) {
+    fields.push(a.wo_number, a.worker_name, a.short_id);
+  }
+  return fields.some(v => (v || "").toString().toLowerCase().includes(q));
+}
+
+function sortRows(rows) {
+  if (!sortField) return rows;
+  return rows.slice().sort((a, b) => {
+    let av = a[sortField], bv = b[sortField];
+    if (av == null) av = sortField === "days_since_art_approved" ? -Infinity : "";
+    if (bv == null) bv = sortField === "days_since_art_approved" ? -Infinity : "";
+    if (typeof av === "number" || typeof bv === "number") {
+      av = +av || 0; bv = +bv || 0;
+    } else {
+      av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase();
+    }
+    return av < bv ? (sortAsc ? -1 : 1) : av > bv ? (sortAsc ? 1 : -1) : 0;
+  });
+}
+
+function rowKey(r) { return r.kid + ":" + r.sio + ":" + r.campaign_id; }
+
+function renderTimeline(timeline, artDate) {
+  if (!timeline.length) return '<div class="muted">No status changes recorded after Sept 1, 2025.</div>';
+  return '<div class="timeline">' + timeline.map(ev => `
+    <div class="step ${ev.status_id === 6 ? 'art-approved' : ''}">
+      <div class="date">${escapeHtml(ev.date)}</div>
+      <div class="name">${escapeHtml(ev.status_name)}</div>
+    </div>`).join('') + '</div>';
+}
+
+function renderPhotos(kid) {
+  const events = APP.photos[kid] || [];
+  if (!events.length) return '<div class="photos-empty">No completed Onfleet photos found for this kiosk (Sept 2025+).</div>';
+  return events.map(ev => {
+    const dt = new Date(ev.dt_iso);
+    const when = isNaN(dt) ? ev.dt_iso : dt.toLocaleDateString() + ' · ' + escapeHtml(ev.task_type || 'Task');
+    const thumbs = ev.ids.map(id =>
+      `<img src="${photoUrl(id, "100x")}" title="${escapeHtml(when)} (#${escapeHtml(ev.short_id)})" data-id="${escapeHtml(id)}" data-meta="${escapeHtml(when)}" onclick="openLightbox(this)" loading="lazy" />`
+    ).join("");
+    return `<div class="photo-event"><div class="when">${escapeHtml(when)}${ev.short_id ? ` · #${escapeHtml(ev.short_id)}` : ''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${thumbs}</div></div>`;
+  }).join('<div style="width:100%;height:0;"></div>');
+}
+
+function renderAssignments(assignments) {
+  if (!assignments.length) return '<div class="muted">No matching Onfleet work order. This kiosk needs a WO created.</div>';
+  return assignments.map(a => {
+    const stateLabel = {0: "Unassigned", 1: "Assigned", 2: "Active"}[a.state] || a.state;
+    return `<div class="assignment">
+      <div><div class="k">WO #</div><div class="v ${a.wo_number ? '' : 'empty'}">${escapeHtml(a.wo_number || '—')}</div></div>
+      <div><div class="k">State</div><div class="v">${escapeHtml(stateLabel)}</div></div>
+      <div><div class="k">Worker</div><div class="v ${a.worker_name ? '' : 'empty'}">${escapeHtml(a.worker_name || (a.worker_id ? '(no name on file)' : '—'))}</div></div>
+      <div><div class="k">Assigned (last modified)</div><div class="v ${a.assigned_at ? '' : 'empty'}">${escapeHtml(a.assigned_at || '—')}</div></div>
+      <div><div class="k">Task Type</div><div class="v">${escapeHtml(a.task_type || '—')}</div></div>
+      <div><div class="k">Route ID</div><div class="v">${escapeHtml(a.short_id || '—')}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRowDrawer(r) {
+  const tags = [];
+  if (r.is_digital) tags.push('<span class="pill installed">Digital</span>');
+  if (r.boosted) tags.push('<span class="pill boosted">Boosted</span>');
+  return `
+    <div class="drawer">
+      <div class="panel">
+        <h3>Current Onfleet Work Order</h3>
+        ${renderAssignments(r.assignments)}
+      </div>
+      <div class="panel">
+        <h3>Status Timeline (Terraboost)</h3>
+        ${renderTimeline(r.timeline, r.art_approved_date)}
+      </div>
+      <div class="panel">
+        <h3>Kiosk Details</h3>
+        <div class="row-info">
+          <div class="li"><div class="k">Reservation</div><div class="v">${escapeHtml(r.reservation_start)} → ${escapeHtml(r.reservation_end)}</div></div>
+          <div class="li"><div class="k">Kiosk Type</div><div class="v">${escapeHtml(r.kiosk_type)} ${tags.join(' ')}</div></div>
+          <div class="li"><div class="k">Art Collection</div><div class="v">${escapeHtml(r.art_collection_name || '—')}</div></div>
+          ${r.art_top_url ? `<div class="li"><div class="k">Top Art</div><div class="v"><a href="${escapeHtml(r.art_top_url)}" target="_blank">Open file ↗</a></div></div>` : ''}
+          ${r.art_bottom_url ? `<div class="li"><div class="k">Bottom Art</div><div class="v"><a href="${escapeHtml(r.art_bottom_url)}" target="_blank">Open file ↗</a></div></div>` : ''}
+          ${r.installed_image_url ? `<div class="li"><div class="k">Installed Image</div><div class="v"><a href="${escapeHtml(r.installed_image_url)}" target="_blank">Open ↗</a></div></div>` : ''}
+        </div>
+      </div>
+      <div class="panel full">
+        <h3>Photo History (Onfleet completed tasks, Sept 2025+)</h3>
+        <div class="photos">${renderPhotos(r.kid)}</div>
+      </div>
+    </div>`;
+}
+
+function render() {
+  let rows = APP.rows.filter(rowMatchesFilter).filter(rowMatchesSearch);
+  rows = sortRows(rows);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('visibleCount').textContent = '0 visible';
+    return;
+  } else {
+    document.getElementById('emptyState').style.display = 'none';
+  }
+  const frag = document.createDocumentFragment();
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const key = rowKey(r);
+    tr.dataset.key = key;
+    if (key === expandedKey) tr.classList.add('expanded');
+    const days = r.days_since_art_approved;
+    const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+    tr.innerHTML = `
+      <td>${pillFor(r.onfleet_state)}${r.install_date ? '<span class="pill installed">installed</span>' : ''}</td>
+      <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days}</span></td>
+      <td>${escapeHtml(r.art_approved_date || '—')}</td>
+      <td>${escapeHtml(r.current_status)}</td>
+      <td>${escapeHtml(r.sio)}</td>
+      <td>${escapeHtml(r.campaign_name)}</td>
+      <td><strong>${escapeHtml(r.kid)}</strong></td>
+      <td>${escapeHtml(r.venue_name)} <span class="muted">${escapeHtml(r.venue_city)}</span></td>
+      <td>${escapeHtml(r.venue_state)}</td>
+      <td>${escapeHtml(r.install_date || '—')}</td>
+    `;
+    tr.addEventListener('click', () => toggleRow(key));
+    frag.appendChild(tr);
+    if (key === expandedKey) {
+      const drawerTr = document.createElement('tr');
+      drawerTr.className = 'drawer-row';
+      drawerTr.innerHTML = `<td colspan="10">${renderRowDrawer(r)}</td>`;
+      frag.appendChild(drawerTr);
+    }
+  }
+  tbody.appendChild(frag);
+  document.getElementById('visibleCount').textContent = `${rows.length} visible of ${APP.rows.length}`;
+}
+
+function toggleRow(key) {
+  expandedKey = expandedKey === key ? null : key;
+  render();
+  // Scroll the expanded row into view
+  if (expandedKey) {
+    setTimeout(() => {
+      const el = document.querySelector(`tr[data-key="${expandedKey}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+  }
+}
+
+function openLightbox(img) {
+  document.getElementById('lb-img').src = photoUrl(img.dataset.id, "800x");
+  document.getElementById('lb-meta').textContent = img.dataset.meta || "";
+  document.getElementById('lightbox').classList.add('show');
+  event.stopPropagation();
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
+
+// Wiring
+for (const c of document.querySelectorAll('.chip')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activeFilter = c.dataset.filter;
+    expandedKey = null;
+    render();
+  });
+}
+document.getElementById('search').addEventListener('input', e => { searchText = e.target.value; expandedKey = null; render(); });
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const f = th.dataset.sort;
+    if (sortField === f) sortAsc = !sortAsc; else { sortField = f; sortAsc = true; }
+    document.querySelectorAll('th').forEach(x => x.classList.remove('active'));
+    th.classList.add('active');
+    th.querySelector('.sort-arrow') && (th.querySelector('.sort-arrow').textContent = sortAsc ? '▲' : '▼');
+    render();
+  });
+});
+
+renderKpis();
+render();
+</script>
+</body>
+</html>
