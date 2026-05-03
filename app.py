@@ -20,6 +20,21 @@ import streamlit.components.v1 as components
 
 import data
 
+POD_CONFIGS = {
+    "Blue": {"AL","AR","FL","IL","IA","LA","MI","MN","MS","MO","NC","SC","WI"},
+    "Green": {"CO","DC","GA","IN","KY","MD","NJ","OH","UT"},
+    "Orange": {"AK","AZ","CA","HI","ID","NV","OR","WA"},
+    "Purple": {"KS","MT","NE","NM","ND","OK","SD","TN","TX","WY"},
+    "Red": {"CT","DE","ME","MA","NH","NY","PA","RI","VT","VA","WV"},
+}
+def pod_for_state(state: str) -> str:
+    s = (state or "").strip().upper()
+    for pod, states in POD_CONFIGS.items():
+        if s in states:
+            return pod
+    return "Other"
+
+
 st.set_page_config(
     page_title="Campaign Tracker",
     page_icon="📍",
@@ -149,8 +164,14 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
     photos_by_kid = bundle["photos_by_kid"]
 
     rows = []
+    skipped_tests = 0
     for c in bundle["campaigns"]:
         cid = c["id"]
+        # Skip obvious test/internal campaigns: orderNumber 0 or name containing "test"/"ignore"
+        nm = (c.get("name") or "").lower()
+        if c.get("orderNumber") in (0, None, "") or "test" in nm or "ignore" in nm or "ignroe" in nm:
+            skipped_tests += 1
+            continue
         camp_name = c.get("name") or ""
         sio = str(c.get("orderNumber") or "").strip().upper()
         status_id = c.get("statusId")
@@ -217,6 +238,7 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
                 onfleet_state = "NOT_IN_ONFLEET"
 
             rows.append({
+                "pod": pod_for_state(venue.get("state", "")),
                 "kid": kid,
                 "sio": sio,
                 "campaign_name": camp_name,
