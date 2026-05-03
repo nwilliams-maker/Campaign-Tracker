@@ -173,6 +173,36 @@
 
   .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+
+  /* View tabs (Campaigns / Workers) */
+  .view-tabs { display:flex; gap:4px; margin: 10px 0 12px; padding-bottom: 0; border-bottom: 1px solid var(--border); }
+  .view-tab {
+    padding: 10px 20px; cursor: pointer; user-select: none;
+    background: transparent; color: var(--text-secondary); border: none;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+    border-bottom: 3px solid transparent; transition: all 0.15s;
+    margin-bottom: -1px;
+  }
+  .view-tab:hover { color: var(--primary); }
+  .view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .view-tab .badge { display:inline-block; background: var(--surface-hover); color: var(--text-secondary); padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; margin-left:6px; }
+  .view-tab.active .badge { background: var(--primary); color: #fff; }
+  .view-content { display: none; }
+  .view-content.active { display: block; }
+
+  /* Workers view */
+  .worker-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden; }
+  .worker-header { padding: 12px 16px; background: var(--surface-hover); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .worker-header h4 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+  .worker-header .stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); }
+  .worker-header .stats strong { color: var(--text); font-weight: 600; }
+  .worker-wos { padding: 0; }
+  .worker-wos table { width: 100%; }
+  .worker-wos th { background: var(--bg); font-size: 10px; padding: 8px 16px; }
+  .worker-wos td { padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--border-light); }
+  .worker-wos tr:last-child td { border-bottom: none; }
+  .worker-empty { padding: 60px 20px; text-align: center; color: var(--text-muted); }
+
   .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
 </style>
 </head>
@@ -187,6 +217,12 @@
     <div class="meta">Sept 2025 onward · auto-cached 5 min</div>
   </div>
 
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="campaigns">By Campaign <span class="badge" id="tabBadgeCampaigns">0</span></button>
+    <button class="view-tab" data-view="workers">By Worker <span class="badge" id="tabBadgeWorkers">0</span></button>
+  </div>
+
+  <div class="view-content active" id="view-campaigns">
   <div class="kpis" id="kpis"></div>
 
   <div class="toolbar">
@@ -230,6 +266,18 @@
       <tbody id="tbody"></tbody>
     </table>
     <div id="emptyState" class="empty-state" style="display:none;">No matching kiosks.</div>
+  </div>
+  </div>
+
+  <div class="view-content" id="view-workers">
+    <div class="toolbar" style="margin-bottom:14px;">
+      <div class="search-wrap" style="flex:1;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="workerSearch" placeholder="Search worker, WO, KID, venue..." />
+      </div>
+      <span class="visible-count" id="workerCount"></span>
+    </div>
+    <div id="workersList"></div>
   </div>
 </div>
 
@@ -508,6 +556,104 @@ document.querySelectorAll('th[data-sort]').forEach(th => {
 
 renderKpis();
 render();
+renderWorkersView();
+
+// View switching
+document.querySelectorAll('.view-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const v = t.dataset.view;
+    document.querySelectorAll('.view-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('view-' + v).classList.add('active');
+  });
+});
+
+document.getElementById('workerSearch').addEventListener('input', e => {
+  workerSearchText = e.target.value;
+  renderWorkersView();
+});
+
+let workerSearchText = "";
+
+function renderWorkersView() {
+  // Pivot: collect every assignment whose row has NO install_date
+  const byWorker = {};
+  let totalWOs = 0;
+  for (const r of APP.rows) {
+    if (r.install_date) continue;  // already installed → skip
+    if (!r.assignments || !r.assignments.length) continue;
+    for (const a of r.assignments) {
+      const name = (a.worker_name || '').trim() || (a.worker_id ? '(no name on file)' : 'UNASSIGNED');
+      if (!byWorker[name]) byWorker[name] = {name, wos: []};
+      byWorker[name].wos.push({...a, row: r});
+      totalWOs++;
+    }
+  }
+  const q = (workerSearchText || '').toLowerCase();
+  let workers = Object.values(byWorker).map(w => {
+    const filtered = q ? w.wos.filter(x => {
+      return [w.name, x.wo_number, x.row.kid, x.row.venue_name, x.row.sio, x.row.campaign_name]
+        .some(v => (v||'').toString().toLowerCase().includes(q));
+    }) : w.wos;
+    return {...w, wos: filtered};
+  }).filter(w => w.wos.length > 0);
+  // Sort: most WOs first
+  workers.sort((a,b) => b.wos.length - a.wos.length || a.name.localeCompare(b.name));
+  document.getElementById('tabBadgeWorkers').textContent = workers.length;
+  document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
+  document.getElementById('workerCount').textContent = `${workers.length} workers · ${workers.reduce((s,w)=>s+w.wos.length,0)} WOs awaiting install`;
+  const list = document.getElementById('workersList');
+  if (!workers.length) {
+    list.innerHTML = '<div class="worker-empty">No workers with open WOs awaiting install.</div>';
+    return;
+  }
+  list.innerHTML = workers.map(w => {
+    const oldest = Math.max(...w.wos.map(x => (x.row.days_since_art_approved || 0)));
+    const stateCounts = w.wos.reduce((acc, x) => {
+      const s = {0:'unassigned',1:'assigned',2:'active'}[x.state] || '?';
+      acc[s] = (acc[s] || 0) + 1; return acc;
+    }, {});
+    const stateChips = Object.entries(stateCounts).map(([s,n]) =>
+      `<span class="pill ${s}">${n} ${escapeHtml(s)}</span>`).join(' ');
+    const rows = w.wos.map(x => {
+      const r = x.row;
+      const days = r.days_since_art_approved;
+      const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+      const stateLabel = {0:'Unassigned',1:'Assigned',2:'Active'}[x.state] || x.state;
+      return `<tr>
+        <td>${pillFor({0:'unassigned',1:'assigned',2:'active'}[x.state] || 'NOT_IN_ONFLEET')}</td>
+        <td><strong>${escapeHtml(x.wo_number || '—')}</strong></td>
+        <td>${escapeHtml(r.kid)}</td>
+        <td>${escapeHtml(r.venue_name)} <span class="muted">${escapeHtml(r.venue_city)}, ${escapeHtml(r.venue_state)}</span></td>
+        <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
+        <td>${escapeHtml(r.sio)}</td>
+        <td>${escapeHtml(r.campaign_name)}</td>
+        <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days + 'd'}</span></td>
+        <td>${escapeHtml(x.assigned_at || '—')}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="worker-card">
+      <div class="worker-header">
+        <h4>${escapeHtml(w.name)}</h4>
+        <div class="stats">
+          <div><strong>${w.wos.length}</strong> WOs awaiting install</div>
+          <div>${stateChips}</div>
+          <div>oldest art approval: <strong>${oldest}d</strong> ago</div>
+        </div>
+      </div>
+      <div class="worker-wos">
+        <table>
+          <thead><tr>
+            <th>State</th><th>WO #</th><th>KID</th><th>Venue</th><th>Pod</th>
+            <th>SIO</th><th>Campaign</th><th class="num">Art age</th><th>Last touched</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
 </script>
 </body>
 </html>
