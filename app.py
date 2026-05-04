@@ -273,8 +273,12 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
                 if a.get("due_date"):
                     row_due_date = a["due_date"][:10] if isinstance(a["due_date"], str) else str(a["due_date"])
                     break
+            # National vs Local — derived from campaign name (DCC heuristic)
+            is_national = "national" in (camp_name or "").lower()
             rows.append({
                 "pod": pod_for_state(v_state),
+                "is_national": is_national,
+                "customer_type": "National" if is_national else "Local",
                 "venue_id": venue.get("id") or "",
                 "venue_address": full_address,
                 "due_date": row_due_date,
@@ -425,6 +429,10 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
                 parts.append(csz)
             v_addr = ", ".join(parts)
         v_pod = row.get("pod") or pod_for_state(v_state) or "Other"
+        # National vs Local — same heuristic as Terraboost rows. Use the row's
+        # campaign_name when available, else the Onfleet client_company custom field.
+        cn_blob = (row.get("campaign_name") or cf.get("client_company") or "").lower()
+        is_national = "national" in cn_blob
         onfleet_workers.append({
             "worker_id": worker_id,
             "worker_name": bundle.get("workers", {}).get(worker_id, "") or "(no name)",
@@ -451,6 +459,8 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
             "venue_state": v_state,
             "venue_id": row.get("venue_id") or v_extra.get("id") or cf.get("venueId") or "",
             "pod": v_pod,
+            "is_national": is_national,
+            "customer_type": "National" if is_national else "Local",
             "kiosk_type": row.get("kiosk_type", ""),
             "is_digital": row.get("is_digital", False),
             "boosted": row.get("boosted", False),
