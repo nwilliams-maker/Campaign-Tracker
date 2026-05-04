@@ -119,6 +119,14 @@ Q_ALL_LOGS = """query AllLogs($cids: [Int!], $cutoff: DateTime!) {
   }
 }"""
 
+Q_VENUES_BY_KIDS = """query VenuesByKids($kids: [String!]) {
+  kiosks(where: {importKioskId: {in: $kids}}) {
+    importKioskId
+    venueId
+    venue { id venueName address1 address2 city state zip }
+  }
+}"""
+
 Q_CAMPAIGN_KIOSKS = """query CK($cids: [Int!]) {
   campaigns(where: {id: {in: $cids}}) {
     id
@@ -183,6 +191,28 @@ def fetch_all_logs(campaign_ids: tuple) -> dict:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_venues_for_kids(kids: tuple, batch: int = 200) -> dict:
+    """Returns {importKioskId: venue_dict}. Bypasses the campaigns->kiosk->venue
+    path which Terraboost returns as null; queries kiosks-by-KID directly where
+    venue data is populated."""
+    if not kids:
+        return {}
+    token = _tb_login()
+    out: dict = {}
+    kid_list = list(kids)
+    for i in range(0, len(kid_list), batch):
+        chunk = kid_list[i:i + batch]
+        data = _tb_query(token, Q_VENUES_BY_KIDS, {"kids": chunk})
+        for k in data.get("kiosks") or []:
+            kid = (k.get("importKioskId") or "").strip().upper()
+            if kid:
+                out[kid] = k.get("venue") or {}
+                if k.get("venueId") and not out[kid].get("id"):
+                    out[kid]["id"] = k.get("venueId")
+    return out
+
+
 def fetch_kiosks_for_campaigns(campaign_ids: tuple, batch: int = 50) -> dict:
     if not campaign_ids:
         return {}
@@ -194,6 +224,24 @@ def fetch_kiosks_for_campaigns(campaign_ids: tuple, batch: int = 50) -> dict:
         data = _tb_query(token, Q_CAMPAIGN_KIOSKS, {"cids": chunk})
         for c in data.get("campaigns") or []:
             out[c["id"]] = c.get("campaignKiosks") or []
+
+    # Terraboost schema quirk: campaign->kiosk->venue returns null. Hydrate via
+    # a direct kiosks-by-KID lookup which DOES populate the venue.
+    all_kids = []
+    for cks in out.values():
+        for ck in cks or []:
+            kk = ((ck.get("kiosk") or {}).get("importKioskId") or "").strip().upper()
+            if kk:
+                all_kids.append(kk)
+    venue_by_kid = fetch_venues_for_kids(tuple(sorted(set(all_kids))))
+    for cks in out.values():
+        for ck in cks or []:
+            kiosk = ck.get("kiosk") or {}
+            kk = (kiosk.get("importKioskId") or "").strip().upper()
+            if kk in venue_by_kid:
+                existing = kiosk.get("venue") or {}
+                if not existing.get("venueName"):
+                    kiosk["venue"] = venue_by_kid[kk]
     return out
 
 
@@ -422,6 +470,23 @@ def fetch_all() -> dict:
     art_dates = fetch_art_approved_dates()
     all_logs = fetch_all_logs(cids)
     kiosks_by_cid = fetch_kiosks_for_campaigns(cids)
+
+    # Hydrate venue data via direct kiosks-by-KID query (the campaign->kiosk
+    # path returns venue=null for active-pipeline kiosks; this is a Terraboost
+    # schema quirk.)
+    all_kids = []
+    for cks in kiosks_by_cid.values():
+        for ck in cks or []:
+            kk = ((ck.get("kiosk") or {}).get("importKioskId") or "").strip().upper()
+            if kk:
+                all_kids.append(kk)
+    venue_by_kid = fetch_venues_for_kids(tuple(sorted(set(all_kids))))
+    for cks in kiosks_by_cid.values():
+        for ck in cks or []:
+            kiosk = ck.get("kiosk") or {}
+            kk = (kiosk.get("importKioskId") or "").strip().upper()
+            if kk in venue_by_kid and not (kiosk.get("venue") or {}).get("venueName"):
+                kiosk["venue"] = venue_by_kid[kk]
 
     open_tasks = fetch_open_tasks()
     workers = fetch_workers()
