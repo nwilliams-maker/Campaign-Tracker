@@ -370,7 +370,15 @@ try:
         raise FileNotFoundError(f"frontend.html missing at {html_path}; dir contents: {_os.listdir(_os.path.dirname(html_path))}")
     with open(html_path, "r", encoding="utf-8") as f:
         html_template = f.read()
-    html = html_template.replace("__APP_DATA__", json.dumps(INITIAL_DATA, default=str))
+    # Escape HTML-significant characters in the JSON so a stray </script>
+    # substring in the data can never break out of the <script> tag.
+    safe_json = (json.dumps(INITIAL_DATA, default=str)
+                  .replace("<", "\\u003c")
+                  .replace(">", "\\u003e")
+                  .replace("&", "\\u0026")
+                  .replace("\u2028", "\\u2028")
+                  .replace("\u2029", "\\u2029"))
+    html = html_template.replace("__APP_DATA__", safe_json)
     st.markdown(f"### Campaign Tracker — {total} kiosks · {not_in_of} need attention · last refreshed {last_refreshed}")
     components.html(html, height=2400, scrolling=True)
 except Exception as e:
