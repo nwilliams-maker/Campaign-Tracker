@@ -376,23 +376,11 @@ last_refreshed = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 # --- Render the entire UI as one HTML component for full styling control -----
 
-# Build an Onfleet-sourced flat list for the By Worker tab. Every open Onfleet
-# task with a worker gets one entry, regardless of whether its kioskId maps to
-# an active-pipeline Terraboost campaign. Enrich with whatever Terraboost data
-# we have for that KID; otherwise fall back to Onfleet's own customFields.
+# Build the By Worker tab. Each open Onfleet task with a worker AND a kiosk
+# matching one of the By Campaign tab's rows produces one entry. Orphan tasks
+# (KID not in the active-pipeline campaign set) are skipped — the user wants
+# the second tab to mirror the client list shown in the first tab.
 kid_to_row = {r["kid"]: r for r in rows if r.get("kid")}
-
-# Collect every KID seen on an Onfleet open task — we'll hydrate venue data
-# for the ones not already in the active-pipeline set so pod/state populate.
-of_kids = set()
-for of_list in (bundle.get("of_by_kid") or {}).values():
-    for t in of_list:
-        cf = data._meta(t)
-        for k in ("kioskId", "kiosk_id", "KioskId", "KID"):
-            if cf.get(k):
-                of_kids.add(str(cf[k]).strip().upper()); break
-missing_kids = tuple(sorted(of_kids - set(kid_to_row.keys())))
-extra_venues = data.fetch_venues_for_kids(missing_kids) if missing_kids else {}
 
 onfleet_workers = []
 seen_task_ids = set()
@@ -420,26 +408,16 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
             assigned_at = datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if ts else ""
         except Exception:
             assigned_at = ""
-        row = kid_to_row.get(kid, {})
-        # Use Terraboost row first; fall back to extra_venues (looked up directly
-        # by KID); fall back to Onfleet customFields. Re-derive pod from state.
-        v_extra = extra_venues.get(kid, {}) if not row else {}
-        v_state = (row.get("venue_state") or v_extra.get("state") or "").strip().upper()
-        if not v_state:
-            v_state = state_from_address(v_extra.get("address1"), v_extra.get("address2"), f"{v_extra.get('city','')}, {v_extra.get('zip','')}")
-        # Build full address from extra_venues if needed
+        row = kid_to_row.get(kid)
+        if not row:
+            # Orphan Onfleet task — KID isn't in the first tab's active campaign
+            # set. Skip so the By Worker tab only shows first-tab campaigns.
+            continue
+        v_state = (row.get("venue_state") or "").strip().upper()
         v_addr = row.get("venue_address") or ""
-        if not v_addr and v_extra:
-            parts = [p for p in [v_extra.get("address1"), v_extra.get("address2")] if p]
-            csz = ", ".join(p for p in [v_extra.get("city","") or "", (v_state + (" " + v_extra.get("zip","") if v_extra.get("zip") else "")).strip()] if p.strip(", "))
-            if csz:
-                parts.append(csz)
-            v_addr = ", ".join(parts)
         v_pod = row.get("pod") or pod_for_state(v_state) or "Other"
-        # National vs Local — same heuristic as Terraboost rows. Use the row's
-        # campaign_name when available, else the Onfleet client_company custom field.
-        cn_blob = (row.get("campaign_name") or cf.get("client_company") or "").lower()
-        is_national = "national" in cn_blob
+        # National vs Local — derived from the matched first-tab row.
+        is_national = bool(row.get("is_national"))
         onfleet_workers.append({
             "worker_id": worker_id,
             "worker_name": bundle.get("workers", {}).get(worker_id, "") or "(no name)",
@@ -455,16 +433,16 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
             "tracking_url": t.get("trackingURL") or "",
             "kid": kid,
             "sio": sio or row.get("sio", ""),
-            "campaign_name": row.get("campaign_name", "") or cf.get("client_company") or "(not in Terraboost active set)",
+            "campaign_name": row.get("campaign_name", ""),
             "campaign_id": row.get("campaign_id"),
             "current_status": row.get("current_status", ""),
             "art_approved_date": row.get("art_approved_date", ""),
             "days_since_art_approved": row.get("days_since_art_approved"),
-            "venue_name": row.get("venue_name") or v_extra.get("venueName") or cf.get("venueName") or "",
+            "venue_name": row.get("venue_name") or "",
             "venue_address": v_addr,
-            "venue_city": row.get("venue_city") or v_extra.get("city") or "",
+            "venue_city": row.get("venue_city") or "",
             "venue_state": v_state,
-            "venue_id": row.get("venue_id") or v_extra.get("id") or cf.get("venueId") or "",
+            "venue_id": row.get("venue_id") or "",
             "pod": v_pod,
             "is_national": is_national,
             "customer_type": "National" if is_national else "Local",
