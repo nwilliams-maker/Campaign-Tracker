@@ -239,10 +239,14 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
                 except Exception:
                     assigned_at = ""
                 cf = data._meta(t)
+                container = t.get("container") or {}
                 assignments.append({
-                    "wo_number": cf.get("woNumber") or cf.get("WO Number") or "",
+                    "wo_number": cf.get("WO_NAME") or cf.get("woNumber") or cf.get("WO Number") or "",
+                    "due_date": cf.get("DUE_DATE") or "",
+                    "pay_per_task": cf.get("PAY_PER_TASK") or "",
                     "task_type": cf.get("taskType") or cf.get("Task Type") or "",
                     "short_id": t.get("shortId") or "",
+                    "task_id": t.get("id") or "",
                     "state": t.get("state"),
                     "worker_id": t.get("worker") or "",
                     "worker_name": workers.get(t.get("worker"), "") if t.get("worker") else "",
@@ -250,6 +254,10 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
                     "complete_after": t.get("completeAfter") or 0,
                     "complete_before": t.get("completeBefore") or 0,
                     "notes": t.get("notes") or "",
+                    "container_type": container.get("type") or "",
+                    "container_worker": container.get("worker") or "",
+                    "container_team": container.get("team") or "",
+                    "tracking_url": t.get("trackingURL") or "",
                 })
 
             if of_match:
@@ -259,9 +267,17 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
             else:
                 onfleet_state = "NOT_IN_ONFLEET"
 
+            # Pull due_date from the first assignment that has one
+            row_due_date = ""
+            for a in assignments:
+                if a.get("due_date"):
+                    row_due_date = a["due_date"][:10] if isinstance(a["due_date"], str) else str(a["due_date"])
+                    break
             rows.append({
                 "pod": pod_for_state(v_state),
+                "venue_id": venue.get("id") or "",
                 "venue_address": full_address,
+                "due_date": row_due_date,
                 "kid": kid,
                 "sio": sio,
                 "campaign_name": camp_name,
