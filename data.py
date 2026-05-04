@@ -366,20 +366,30 @@ def _meta(task: dict) -> dict:
     return out
 
 
+def _norm_key(s: str) -> str:
+    """Normalize a field key for lookup: lowercase, strip non-alphanumeric.
+    So 'kioskId', 'Kiosk ID', 'KIOSK_ID', 'kiosk-id', 'kioskid' all collapse
+    to the same normalized form 'kioskid'."""
+    return "".join(c for c in (s or "").lower() if c.isalnum())
+
+
+# Normalized key sets — any field whose normalized key is in here counts.
+_KID_KEYS = {"kioskid", "kid"}
+_SIO_KEYS = {"sio", "ordernumber", "orderno"}
+
+
 def _kid_of(task: dict) -> str:
     md = _meta(task)
-    for k in ("kioskId", "kiosk_id", "KioskId", "KID"):
-        v = md.get(k)
-        if v:
+    for k, v in md.items():
+        if _norm_key(k) in _KID_KEYS and v:
             return str(v).strip().upper()
     return ""
 
 
 def _sio_of(task: dict) -> str:
     md = _meta(task)
-    for k in ("sio", "SIO", "Order Number", "orderNumber"):
-        v = md.get(k)
-        if v:
+    for k, v in md.items():
+        if _norm_key(k) in _SIO_KEYS and v:
             return str(v).strip().upper()
     return ""
 
