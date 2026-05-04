@@ -192,23 +192,6 @@
 
 
 
-  /* Workers view — worker cards with their WOs inside */
-  .worker-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden; }
-  .worker-header { padding: 12px 18px; background: linear-gradient(90deg, var(--primary-tint), var(--surface)); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .worker-header h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
-  .worker-header h4 .wo-count { color: var(--primary); font-weight: 600; font-size: 13px; margin-left: 8px; }
-  .worker-header .stats { display: flex; gap: 12px; font-size: 12px; align-items: center; flex-wrap: wrap; }
-  .worker-header .stats .pill { font-size: 11px; }
-  .worker-header .oldest { font-size: 12px; color: var(--text-secondary); }
-  .worker-header .oldest strong { color: var(--text); }
-  .worker-wo-row { display: grid; grid-template-columns: 180px 100px 80px 1fr 90px 130px; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border-light); cursor: pointer; align-items: center; transition: background 0.1s; font-size: 13px; }
-  .worker-wo-row:last-child { border-bottom: none; }
-  .worker-wo-row:hover { background: var(--surface-hover); }
-  .worker-wo-row.expanded { background: var(--primary-tint); }
-  .worker-wo-row .wo { font-weight: 600; color: var(--text); }
-  .worker-wo-row .venue-cell { color: var(--text); }
-  .worker-wo-row .venue-cell .muted { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-  .worker-empty { padding: 60px 20px; text-align: center; color: var(--text-muted); }
 
   .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
 </style>
@@ -261,12 +244,15 @@
           <th data-sort="pod">Pod</th>
           <th data-sort="days_since_art_approved" class="num">Days <span class="sort-arrow">▼</span></th>
           <th data-sort="art_approved_date">Art Approved</th>
+          <th data-sort="due_date">Due Date</th>
           <th data-sort="current_status">Terraboost Status</th>
           <th data-sort="sio">SIO</th>
           <th data-sort="campaign_name">Campaign</th>
           <th data-sort="kid">KID</th>
           <th data-sort="venue_name">Venue</th>
+          <th data-sort="venue_address">Address</th>
           <th data-sort="venue_state">State</th>
+          <th data-sort="venue_id">Venue ID</th>
           <th data-sort="install_date">Installed</th>
         </tr>
       </thead>
@@ -278,9 +264,6 @@
 
   <div class="view-content" id="view-workers">
     <div class="toolbar">
-      <span class="chip" data-wfilter="not-installed-with-worker">Has Worker, Not Installed</span>
-      <span class="chip" data-wfilter="not-installed-no-worker">No Worker (UNASSIGNED)</span>
-      <span class="chip active" data-wfilter="all-not-installed">All Not Installed</span>
       <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
       <span class="chip pod-w-chip active" data-pod="all">All Pods</span>
       <span class="chip pod-w-chip" data-pod="Blue" style="border-color:#3b82f6;color:#3b82f6;">Blue</span>
@@ -295,8 +278,25 @@
       <span class="visible-count" id="workerCount"></span>
     </div>
 
-    <div id="workersList"></div>
-  </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-wsort="worker_name">Worker</th>
+            <th data-wsort="wo_number">WO #</th>
+            <th data-wsort="state_label">State</th>
+            <th data-wsort="pod">Pod</th>
+            <th data-wsort="days_since_art_approved" class="num">Art age</th>
+            <th data-wsort="due_date">Due</th>
+            <th data-wsort="venue_name">Venue</th>
+            <th data-wsort="assigned_at">Last touched</th>
+          </tr>
+        </thead>
+        <tbody id="workersTbody"></tbody>
+      </table>
+      <div id="workersEmpty" class="empty-state" style="display:none;">No matching WOs.</div>
+    </div>
+  </div></div>
 
 <script>
 const APP = __APP_DATA__;
@@ -505,6 +505,20 @@ function renderWorkerDrawer(r) {
           <div class="li"><div class="k">Art Collection</div><div class="v">${escapeHtml(r.art_collection_name || '—')}</div></div>
         </div>
       </div>
+      <div class="panel">
+        <h3>Onfleet Task</h3>
+        <div class="row-info">
+          <div class="li"><div class="k">WO # / Route Name</div><div class="v"><strong>${escapeHtml(r.wo_number || '—')}</strong></div></div>
+          <div class="li"><div class="k">Task Type</div><div class="v">${escapeHtml(r.task_type || '—')}</div></div>
+          <div class="li"><div class="k">Onfleet Short ID</div><div class="v">${escapeHtml(r.short_id || '—')}</div></div>
+          <div class="li"><div class="k">State</div><div class="v">${escapeHtml(r.state_label || '—')}</div></div>
+          <div class="li"><div class="k">Due Date</div><div class="v">${escapeHtml(r.due_date || '—')}</div></div>
+          <div class="li"><div class="k">Pay per Task</div><div class="v">${escapeHtml(r.pay_per_task ? '$' + r.pay_per_task : '—')}</div></div>
+          <div class="li"><div class="k">Notes</div><div class="v">${escapeHtml(r.notes || '—')}</div></div>
+          <div class="li"><div class="k">Container</div><div class="v">${escapeHtml(r.container_type || '—')}</div></div>
+          ${r.tracking_url ? `<div class="li"><div class="k">Tracking</div><div class="v"><a href="${escapeHtml(r.tracking_url)}" target="_blank">Open ↗</a></div></div>` : ''}
+        </div>
+      </div>
       <div class="panel full">
         <h3>Approved Artwork Mockup</h3>
         ${renderArtMockup(r)}
@@ -541,12 +555,15 @@ function render() {
       <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
       <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days}</span></td>
       <td>${escapeHtml(r.art_approved_date || '—')}</td>
+      <td>${escapeHtml(r.due_date || '—')}</td>
       <td>${escapeHtml(r.current_status)}</td>
       <td>${escapeHtml(r.sio)}</td>
       <td>${escapeHtml(r.campaign_name)}</td>
       <td><strong>${escapeHtml(r.kid)}</strong></td>
-      <td><div style="font-weight:500;">${escapeHtml(r.venue_name)}</div><div class="muted" style="font-size:11px;line-height:1.3;">${escapeHtml(r.venue_address || (r.venue_city + ", " + r.venue_state))}</div></td>
+      <td>${escapeHtml(r.venue_name)} <span class="muted" style="font-size:11px;">${escapeHtml(r.venue_city)}</span></td>
+      <td class="muted" style="font-size:12px;">${escapeHtml(r.venue_address || '—')}</td>
       <td>${escapeHtml(r.venue_state)}</td>
+      <td class="muted" style="font-size:12px;">${escapeHtml(r.venue_id || '—')}</td>
       <td>${escapeHtml(r.install_date || '—')}</td>
     `;
     tr.addEventListener('click', () => toggleRow(key));
@@ -554,7 +571,7 @@ function render() {
     if (key === expandedKey) {
       const drawerTr = document.createElement('tr');
       drawerTr.className = 'drawer-row';
-      drawerTr.innerHTML = `<td colspan="11">${renderRowDrawer(r)}</td>`;
+      drawerTr.innerHTML = `<td colspan="14">${renderRowDrawer(r)}</td>`;
       frag.appendChild(drawerTr);
     }
   }
@@ -638,104 +655,100 @@ document.getElementById('workerSearch').addEventListener('input', e => {
 
 
 function renderWorkersView() {
-  // Build flat WO records (one per assignment on a not-installed row)
+  // Build flat WO records — ONLY rows that actually have a worker assigned.
+  // Skip rows where install_date is set (already done) and skip unassigned WOs.
   let workerRows = [];
   for (const r of APP.rows) {
     if (r.install_date) continue;
-    if (!r.assignments || !r.assignments.length) {
-      workerRows.push({...r, worker_name: '(no worker / unassigned)', worker_id: '', wo_number: '', state_label: 'unassigned', assigned_at: '', short_id: '', task_type: '', _state: 0});
-      continue;
-    }
+    if (!r.assignments || !r.assignments.length) continue;  // skip rows with no Onfleet WO
     for (const a of r.assignments) {
+      if (!a.worker_id && !a.worker_name) continue;  // skip unassigned WOs
       const stateLabel = {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state));
-      workerRows.push({...r, worker_name: a.worker_name || (a.worker_id ? '(no name)' : '(no worker / unassigned)'), worker_id: a.worker_id || '', wo_number: a.wo_number || '', state_label: stateLabel, assigned_at: a.assigned_at || '', short_id: a.short_id || '', task_type: a.task_type || '', _state: a.state});
+      workerRows.push({
+        ...r,
+        worker_name: a.worker_name || '(no name on file)',
+        worker_id: a.worker_id || '',
+        wo_number: a.wo_number || '',
+        state_label: stateLabel,
+        assigned_at: a.assigned_at || '',
+        short_id: a.short_id || '',
+        task_type: a.task_type || '',
+        _state: a.state,
+      });
     }
   }
 
-  const f = activeWorkerFilter || 'all-not-installed';
   const pod = activeWorkerPod || 'all';
-  let filtered = workerRows.filter(r => {
-    if (pod !== 'all' && r.pod !== pod) return false;
-    if (f === 'not-installed-with-worker') return !!r.worker_id;
-    if (f === 'not-installed-no-worker') return !r.worker_id;
-    return true;
-  });
+  let filtered = workerRows.filter(r => pod === 'all' || r.pod === pod);
   if (workerSearchText) {
     const q = workerSearchText.toLowerCase();
     filtered = filtered.filter(r => [r.worker_name, r.wo_number, r.kid, r.venue_name, r.venue_address, r.sio, r.campaign_name]
       .some(v => (v||'').toString().toLowerCase().includes(q)));
   }
-
-  // Group by worker_name
-  const byWorker = {};
-  for (const r of filtered) {
-    if (!byWorker[r.worker_name]) byWorker[r.worker_name] = [];
-    byWorker[r.worker_name].push(r);
+  if (workerSortField) {
+    filtered = filtered.slice().sort((a,b) => {
+      let av = a[workerSortField], bv = b[workerSortField];
+      if (av == null) av = workerSortField === 'days_since_art_approved' ? -Infinity : '';
+      if (bv == null) bv = workerSortField === 'days_since_art_approved' ? -Infinity : '';
+      if (typeof av === 'number' || typeof bv === 'number') { av = +av || 0; bv = +bv || 0; }
+      else { av = (av||'').toString().toLowerCase(); bv = (bv||'').toString().toLowerCase(); }
+      return av < bv ? (workerSortAsc ? -1 : 1) : av > bv ? (workerSortAsc ? 1 : -1) : 0;
+    });
+  } else {
+    // default: by worker name, then oldest art-approved
+    filtered.sort((a,b) =>
+      a.worker_name.localeCompare(b.worker_name)
+      || ((b.days_since_art_approved||0) - (a.days_since_art_approved||0))
+    );
   }
-  // Sort workers by # WOs desc, then by name
-  const workerNames = Object.keys(byWorker).sort((a,b) => byWorker[b].length - byWorker[a].length || a.localeCompare(b));
 
+  const uniqueWorkers = new Set(filtered.map(r => r.worker_name)).size;
   document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
-  document.getElementById('tabBadgeWorkers').textContent = workerNames.length;
-  document.getElementById('workerCount').textContent = `${workerNames.length} workers · ${filtered.length} WOs awaiting install`;
+  document.getElementById('tabBadgeWorkers').textContent = uniqueWorkers;
+  document.getElementById('workerCount').textContent = `${uniqueWorkers} workers · ${filtered.length} WOs awaiting install`;
 
-  const list = document.getElementById('workersList');
-  if (!workerNames.length) {
-    list.innerHTML = '<div class="worker-empty">No matching WOs.</div>';
-    return;
-  }
+  const tbody = document.getElementById('workersTbody');
+  const empty = document.getElementById('workersEmpty');
+  if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
 
-  list.innerHTML = '';
-  for (const name of workerNames) {
-    const wos = byWorker[name].slice().sort((a,b) => (b.days_since_art_approved||0) - (a.days_since_art_approved||0));
-    const oldest = Math.max(...wos.map(x => x.days_since_art_approved || 0));
-    const stateCounts = wos.reduce((acc, x) => { acc[x.state_label] = (acc[x.state_label]||0) + 1; return acc; }, {});
-    const stateChips = Object.entries(stateCounts).map(([s,n]) => `<span class="pill ${s === 'unassigned' ? 'unassigned' : s === 'assigned' ? 'assigned' : s === 'active' ? 'active' : 'not-onfleet'}">${n} ${escapeHtml(s)}</span>`).join(' ');
+  const frag = document.createDocumentFragment();
+  let lastWorker = null;
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const days = r.days_since_art_approved;
+    const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+    const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
+    const wKey = r.worker_name + ':' + (r.wo_number || '') + ':' + r.kid + ':' + i;
+    const showName = r.worker_name !== lastWorker;
+    lastWorker = r.worker_name;
 
-    const card = document.createElement('div');
-    card.className = 'worker-card';
-
-    const header = document.createElement('div');
-    header.className = 'worker-header';
-    header.innerHTML = `
-      <h4>${escapeHtml(name)} <span class="wo-count">· ${wos.length} WO${wos.length===1?'':'s'}</span></h4>
-      <div class="stats">
-        ${stateChips}
-        <div class="oldest">oldest art: <strong>${oldest}d</strong></div>
-      </div>`;
-    card.appendChild(header);
-
-    for (let i = 0; i < wos.length; i++) {
-      const r = wos[i];
-      const days = r.days_since_art_approved;
-      const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
-      const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
-      const wKey = name + ':' + (r.wo_number || '') + ':' + r.kid + ':' + i;
-
-      const row = document.createElement('div');
-      row.className = 'worker-wo-row' + (wKey === workersExpandedKey ? ' expanded' : '');
-      row.innerHTML = `
-        <div class="wo">${escapeHtml(r.wo_number || '— no WO —')}</div>
-        <div><span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span></div>
-        <div><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></div>
-        <div class="venue-cell">${escapeHtml(r.venue_name)} <span class="muted">· ${escapeHtml(r.kid)} · ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span></div>
-        <div><span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span></div>
-        <div class="muted">${escapeHtml(r.assigned_at || '—')}</div>`;
-      row.addEventListener('click', () => {
-        workersExpandedKey = workersExpandedKey === wKey ? null : wKey;
-        renderWorkersView();
-      });
-      card.appendChild(row);
-
-      if (wKey === workersExpandedKey) {
-        const drawer = document.createElement('div');
-        drawer.style.cssText = 'background: var(--bg); padding: 0;';
-        drawer.innerHTML = renderWorkerDrawer(r);
-        card.appendChild(drawer);
-      }
+    const tr = document.createElement('tr');
+    if (wKey === workersExpandedKey) tr.classList.add('expanded');
+    tr.innerHTML = `
+      <td>${showName ? `<strong>${escapeHtml(r.worker_name)}</strong>` : `<span class="muted" style="opacity:0.4;">${escapeHtml(r.worker_name)}</span>`}</td>
+      <td><strong>${escapeHtml(r.wo_number || r.notes || r.short_id || '— no WO —')}</strong></td>
+      <td><span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span></td>
+      <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
+      <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days + 'd'}</span></td>
+      <td>${escapeHtml(r.due_date || '—')}</td>
+      <td><div>${escapeHtml(r.venue_name)} <span class="muted">· ${escapeHtml(r.kid)}</span></div><div class="muted" style="font-size:11px;">${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</div></td>
+      <td>${escapeHtml(r.assigned_at || '—')}</td>
+    `;
+    tr.addEventListener('click', () => {
+      workersExpandedKey = workersExpandedKey === wKey ? null : wKey;
+      renderWorkersView();
+    });
+    frag.appendChild(tr);
+    if (wKey === workersExpandedKey) {
+      const drawerTr = document.createElement('tr');
+      drawerTr.className = 'drawer-row';
+      drawerTr.innerHTML = `<td colspan="8">${renderWorkerDrawer(r)}</td>`;
+      frag.appendChild(drawerTr);
     }
-    list.appendChild(card);
   }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
 }
 </script>
 </body>
