@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Campaign Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --surface-hover: #e2e8f0;
+    --border: #cbd5e1;
+    --border-light: #e2e8f0;
+    --text: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --primary: #633094;
+    --primary-hover: #4c2671;
+    --primary-tint: #f3e8ff;
+    --green: #76bc21;
+    --green-bg: #dcfce7;
+    --green-text: #166534;
+    --red-bg: #fee2e2;
+    --red-text: #991b1b;
+    --yellow-bg: #FEF9C3;
+    --yellow-text: #854d0e;
+    --blue-bg: #dbeafe;
+    --blue-text: #1e40af;
+    --teal-bg: #ccfbf1;
+    --teal-text: #0f766e;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
+
+  .page { padding: 0 16px 60px; max-width: 1700px; margin: 0 auto; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .header h1 { margin: 0; font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+  .header h1 .accent { color: var(--primary); }
+  .header .meta { color: var(--text-secondary); font-size: 12px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); font-weight: 600; }
+  .kpi .value { font-size: 24px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; color: var(--text); }
+  .kpi .delta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .kpi.alert .value { color: var(--red-text); }
+  .kpi.warn .value { color: var(--yellow-text); }
+  .kpi.good .value { color: var(--green-text); }
+
+  .toolbar { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .chip { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; background: transparent; color: var(--primary); border: 1px solid var(--border); transition: all 0.15s; }
+  .chip:hover { background: var(--surface-hover); border-color: var(--primary); }
+  .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 2px 8px rgba(99,48,148,0.3); }
+  .search-wrap { flex: 1; min-width: 280px; position: relative; }
+  .search-wrap input { width: 100%; padding: 7px 12px 7px 34px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+  .search-wrap input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99,48,148,0.15); }
+  .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+  .visible-count { color: var(--text-secondary); font-size: 12px; margin-left: auto; font-weight: 500; }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--surface-hover); color: var(--text-secondary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: var(--primary); }
+  thead th .sort-arrow { display: inline-block; opacity: 0.4; margin-left: 4px; font-size: 9px; }
+  thead th.active .sort-arrow { opacity: 1; color: var(--primary); }
+  tbody tr { cursor: pointer; transition: background 0.1s; }
+  tbody tr:hover { background: var(--surface-hover); }
+  tbody tr.expanded { background: var(--primary-tint); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); font-size: 13px; vertical-align: middle; color: var(--text); }
+  tbody tr:last-child td { border-bottom: none; }
+  td .muted { color: var(--text-muted); font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }
+  .pill.not-onfleet { background: var(--red-bg); color: var(--red-text); }
+  .pill.unassigned { background: var(--yellow-bg); color: var(--yellow-text); }
+  .pill.assigned { background: var(--green-bg); color: var(--green-text); }
+  .pill.active { background: var(--blue-bg); color: var(--blue-text); }
+  .pill.installed { background: var(--blue-bg); color: var(--blue-text); margin-left: 4px; }
+  .pill.boosted { background: var(--primary-tint); color: var(--primary); margin-left: 4px; }
+
+  .days { font-weight: 600; }
+  .days.warn { color: var(--yellow-text); }
+  .days.alert { color: var(--red-text); }
+
+  .drawer-row td { padding: 0 !important; background: var(--bg); }
+  .drawer { padding: 16px 20px; display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; border-top: 2px solid var(--primary); }
+  .drawer h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin: 0 0 10px 0; font-weight: 700; }
+  .drawer .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .drawer .panel.full { grid-column: 1 / -1; }
+  .row-info { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; }
+  .row-info .li { display: flex; flex-direction: column; min-width: 130px; }
+  .row-info .li .k { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; font-weight: 600; }
+  .row-info .li .v { color: var(--text); font-weight: 500; }
+  .row-info .li .v a { color: var(--primary); text-decoration: none; }
+  .row-info .li .v a:hover { text-decoration: underline; }
+
+  .timeline { position: relative; padding-left: 18px; }
+  .timeline::before { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline .step { position: relative; margin-bottom: 12px; }
+  .timeline .step:last-child { margin-bottom: 0; }
+  .timeline .step::before { content: ''; position: absolute; left: -18px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--primary); }
+  .timeline .step.art-approved::before { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+  .timeline .step .date { font-size: 11px; color: var(--text-secondary); }
+  .timeline .step .name { font-size: 13px; font-weight: 500; margin-top: 2px; color: var(--text); }
+
+  .photos { display: flex; flex-wrap: wrap; gap: 8px; }
+  .photos img { height: 60px; width: 60px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.1s, box-shadow 0.15s; }
+  .photos img:hover { transform: scale(1.05); box-shadow: 0 2px 6px rgba(99,48,148,0.2); border-color: var(--primary); }
+  .photos .photo-event { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding-right: 10px; }
+  .photos .photo-event .when { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; font-weight: 500; }
+  .photos-empty { color: var(--text-muted); font-size: 13px; font-style: italic; }
+
+  .assignment { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 10px 0; border-bottom: 1px dashed var(--border-light); }
+  .assignment:last-child { border-bottom: none; padding-bottom: 0; }
+  .assignment .k { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; font-weight: 600; }
+  .assignment .v { color: var(--text); font-size: 13px; font-weight: 500; }
+  .assignment .v.empty { color: var(--text-muted); font-style: italic; font-weight: 400; }
+
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.92); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 30px; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 80vh; border-radius: 4px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
+  .lightbox .lb-meta { color: #e2e8f0; font-size: 14px; }
+  .lightbox .lb-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; }
+  .lightbox .lb-close:hover { color: var(--red-text); }
+
+
+  .pod-pill { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:0.02em; }
+  .pod-Blue { background:#dbeafe; color:#1d4ed8; }
+  .pod-Green { background:#dcfce7; color:#15803d; }
+  .pod-Orange { background:#fed7aa; color:#c2410c; }
+  .pod-Purple { background:#f3e8ff; color:#7e22ce; }
+  .pod-Red { background:#fee2e2; color:#b91c1c; }
+  .pod-Other { background:#e2e8f0; color:#475569; }
+
+
+  /* Hover-blowup: thumbnail shows enlarged version on hover, no click needed */
+  .photo-thumb { position: relative; display: inline-block; }
+  .photo-thumb img.thumb { height: 180px; width: 180px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); transition: border-color 0.15s; }
+  .photo-thumb:hover img.thumb { border-color: var(--primary); }
+  .photo-thumb img.blowup {
+    display: none; position: absolute; left: 190px; top: -20px;
+    width: 700px; max-width: 80vw; max-height: 70vh; object-fit: contain;
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25); background: var(--surface);
+    z-index: 1000;
+  }
+  .photo-thumb:hover img.blowup { display: block; }
+  /* Push blowups left if near right edge */
+  .photo-thumb.right-edge img.blowup { left: auto; right: 190px; }
+
+  /* Art mockup card with hover-zoom */
+  .art-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    position: relative;
+  }
+  .art-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); font-weight: 600; }
+  .art-card .frame {
+    position: relative; width: 100%; height: 360px; background: var(--surface);
+    border: 1px dashed var(--border); border-radius: 4px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .art-card .frame iframe, .art-card .frame embed {
+    width: 100%; height: 100%; border: 0;
+  }
+  .art-card .frame .nofile { color: var(--text-muted); font-size: 12px; font-style: italic; }
+  .art-card .open-link { font-size: 11px; color: var(--primary); text-decoration: none; }
+  .art-card .open-link:hover { text-decoration: underline; }
+
+  .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+
+  /* View tabs (Campaigns / Workers) */
+  .view-tabs { display:flex; gap:4px; margin: 10px 0 12px; padding-bottom: 0; border-bottom: 1px solid var(--border); }
+  .view-tab {
+    padding: 10px 20px; cursor: pointer; user-select: none;
+    background: transparent; color: var(--text-secondary); border: none;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+    border-bottom: 3px solid transparent; transition: all 0.15s;
+    margin-bottom: -1px;
+  }
+  .view-tab:hover { color: var(--primary); }
+  .view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .view-tab .badge { display:inline-block; background: var(--surface-hover); color: var(--text-secondary); padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; margin-left:6px; }
+  .view-tab.active .badge { background: var(--primary); color: #fff; }
+  .view-content { display: none; }
+  .view-content.active { display: block; }
+
+
+
+  /* Workers view — worker cards with their WOs inside */
+  .worker-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden; }
+  .worker-header { padding: 12px 18px; background: linear-gradient(90deg, var(--primary-tint), var(--surface)); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .worker-header h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+  .worker-header h4 .wo-count { color: var(--primary); font-weight: 600; font-size: 13px; margin-left: 8px; }
+  .worker-header .stats { display: flex; gap: 12px; font-size: 12px; align-items: center; flex-wrap: wrap; }
+  .worker-header .stats .pill { font-size: 11px; }
+  .worker-header .oldest { font-size: 12px; color: var(--text-secondary); }
+  .worker-header .oldest strong { color: var(--text); }
+  .worker-wo-row { display: grid; grid-template-columns: 180px 100px 80px 1fr 90px 130px; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border-light); cursor: pointer; align-items: center; transition: background 0.1s; font-size: 13px; }
+  .worker-wo-row:last-child { border-bottom: none; }
+  .worker-wo-row:hover { background: var(--surface-hover); }
+  .worker-wo-row.expanded { background: var(--primary-tint); }
+  .worker-wo-row .wo { font-weight: 600; color: var(--text); }
+  .worker-wo-row .venue-cell { color: var(--text); }
+  .worker-wo-row .venue-cell .muted { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .worker-empty { padding: 60px 20px; text-align: center; color: var(--text-muted); }
+
+  .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header">
+    <div>
+      <h1>Campaign <span class="accent">Tracker</span></h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="meta">Sept 2025 onward · auto-cached 5 min</div>
+  </div>
+
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="campaigns">By Campaign <span class="badge" id="tabBadgeCampaigns">0</span></button>
+    <button class="view-tab" data-view="workers">By Worker <span class="badge" id="tabBadgeWorkers">0</span></button>
+  </div>
+
+  <div class="view-content active" id="view-campaigns">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="toolbar">
+    <span class="chip active" data-filter="all">All</span>
+    <span class="chip" data-filter="needs-attention">Needs Attention</span>
+    <span class="chip" data-filter="unassigned">Unassigned WO</span>
+    <span class="chip" data-filter="assigned">Assigned</span>
+    <span class="chip" data-filter="installed">Installed</span>
+    <span class="chip" data-filter="not-installed">Not Yet Installed</span>
+    <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <span class="chip pod-chip" data-pod="all">All Pods</span>
+    <span class="chip pod-chip" data-pod="Blue" style="border-color:#3b82f6;color:#3b82f6;">Blue</span>
+    <span class="chip pod-chip" data-pod="Green" style="border-color:#16a34a;color:#16a34a;">Green</span>
+    <span class="chip pod-chip" data-pod="Orange" style="border-color:#ea580c;color:#ea580c;">Orange</span>
+    <span class="chip pod-chip" data-pod="Purple" style="border-color:#9333ea;color:#9333ea;">Purple</span>
+    <span class="chip pod-chip" data-pod="Red" style="border-color:#dc2626;color:#dc2626;">Red</span>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="search" placeholder="Search SIO, campaign, KID, venue, worker..." />
+    </div>
+    <span class="visible-count" id="visibleCount"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="onfleet_state">Status</th>
+          <th data-sort="pod">Pod</th>
+          <th data-sort="days_since_art_approved" class="num">Days <span class="sort-arrow">▼</span></th>
+          <th data-sort="art_approved_date">Art Approved</th>
+          <th data-sort="current_status">Terraboost Status</th>
+          <th data-sort="sio">SIO</th>
+          <th data-sort="campaign_name">Campaign</th>
+          <th data-sort="kid">KID</th>
+          <th data-sort="venue_name">Venue</th>
+          <th data-sort="venue_state">State</th>
+          <th data-sort="install_date">Installed</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">No matching kiosks.</div>
+  </div>
+  </div>
+
+  <div class="view-content" id="view-workers">
+    <div class="toolbar">
+      <span class="chip" data-wfilter="not-installed-with-worker">Has Worker, Not Installed</span>
+      <span class="chip" data-wfilter="not-installed-no-worker">No Worker (UNASSIGNED)</span>
+      <span class="chip active" data-wfilter="all-not-installed">All Not Installed</span>
+      <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+      <span class="chip pod-w-chip active" data-pod="all">All Pods</span>
+      <span class="chip pod-w-chip" data-pod="Blue" style="border-color:#3b82f6;color:#3b82f6;">Blue</span>
+      <span class="chip pod-w-chip" data-pod="Green" style="border-color:#16a34a;color:#16a34a;">Green</span>
+      <span class="chip pod-w-chip" data-pod="Orange" style="border-color:#ea580c;color:#ea580c;">Orange</span>
+      <span class="chip pod-w-chip" data-pod="Purple" style="border-color:#9333ea;color:#9333ea;">Purple</span>
+      <span class="chip pod-w-chip" data-pod="Red" style="border-color:#dc2626;color:#dc2626;">Red</span>
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="workerSearch" placeholder="Search worker / WO / KID / venue / SIO..." />
+      </div>
+      <span class="visible-count" id="workerCount"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-wsort="wo_number">Work Order</th>
+            <th data-wsort="state_label">State</th>
+            <th data-wsort="worker_name">Worker</th>
+            <th data-wsort="pod">Pod</th>
+            <th data-wsort="days_since_art_approved" class="num">Art age</th>
+            <th data-wsort="venue_name">Venue</th>
+            <th data-wsort="assigned_at">Last touched</th>
+          </tr>
+        </thead>
+        <tbody id="workersTbody"></tbody>
+      </table>
+      <div id="workersEmpty" class="empty-state" style="display:none;">No matching WOs.</div>
+    </div>
+  </div>cript>
+const APP = __APP_DATA__;
+const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.png";
+function photoUrl(id, size) { return PHOTO_URL_TEMPLATE.replace("{id}", id).replace("{size}", size || "100x"); }
+
+let activeFilter = "all";
+let activePod = "all";
+let searchText = "";
+let workerSearchText = "";
+let activeWorkerFilter = "all-not-installed";
+let activeWorkerPod = "all";
+let workerSortField = "";
+let workerSortAsc = false;
+let workersExpandedKey = null;
+let sortField = "days_since_art_approved";
+let sortAsc = false;
+let expandedKey = null;
+
+document.getElementById('meta').textContent = `Last refreshed ${new Date(APP.last_refreshed).toLocaleString()} · ${APP.rows.length} kiosk rows · ${APP.kpis.open_tasks} open Onfleet tasks · ${APP.kpis.completed_tasks} completed (Sept 2025+)`;
+
+function renderKpis() {
+  const k = APP.kpis;
+  const cards = [
+    { label: "Total Kiosks", value: k.total, cls: "" },
+    { label: "Needs Attention", value: k.not_in_of, cls: "alert", delta: "no Onfleet WO" },
+    { label: "Unassigned WO", value: k.unassigned, cls: "warn", delta: "no contractor yet" },
+    { label: "Assigned", value: k.assigned, cls: "good", delta: "contractor accepted" },
+    { label: "Installed", value: k.installed, cls: "", delta: `of ${k.total} total` },
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c => `
+    <div class="kpi ${c.cls}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value.toLocaleString()}</div>
+      ${c.delta ? `<div class="delta">${c.delta}</div>` : ''}
+    </div>`).join('');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function pillFor(state) {
+  const cls = state === "NOT_IN_ONFLEET" ? "not-onfleet" : state.toLowerCase();
+  const label = state === "NOT_IN_ONFLEET" ? "Not in Onfleet" : state;
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function rowMatchesFilter(r) {
+  if (activePod !== "all" && r.pod !== activePod) return false;
+  if (activeFilter === "needs-attention") return r.onfleet_state === "NOT_IN_ONFLEET";
+  if (activeFilter === "unassigned") return r.onfleet_state === "unassigned";
+  if (activeFilter === "assigned") return r.onfleet_state === "assigned";
+  if (activeFilter === "installed") return !!r.install_date;
+  if (activeFilter === "not-installed") return !r.install_date;
+  return true;
+}
+
+function rowMatchesSearch(r) {
+  if (!searchText) return true;
+  const q = searchText.toLowerCase();
+  const fields = [r.sio, r.campaign_name, r.kid, r.venue_name, r.venue_city, r.venue_state, r.current_status];
+  for (const a of (r.assignments || [])) {
+    fields.push(a.wo_number, a.worker_name, a.short_id);
+  }
+  return fields.some(v => (v || "").toString().toLowerCase().includes(q));
+}
+
+function sortRows(rows) {
+  if (!sortField) return rows;
+  return rows.slice().sort((a, b) => {
+    let av = a[sortField], bv = b[sortField];
+    if (av == null) av = sortField === "days_since_art_approved" ? -Infinity : "";
+    if (bv == null) bv = sortField === "days_since_art_approved" ? -Infinity : "";
+    if (typeof av === "number" || typeof bv === "number") {
+      av = +av || 0; bv = +bv || 0;
+    } else {
+      av = (av || "").toString().toLowerCase(); bv = (bv || "").toString().toLowerCase();
+    }
+    return av < bv ? (sortAsc ? -1 : 1) : av > bv ? (sortAsc ? 1 : -1) : 0;
+  });
+}
+
+function rowKey(r) { return r.kid + ":" + r.sio + ":" + r.campaign_id; }
+
+function renderTimeline(timeline, artDate) {
+  if (!timeline.length) return '<div class="muted">No status changes recorded after Sept 1, 2025.</div>';
+  return '<div class="timeline">' + timeline.map(ev => `
+    <div class="step ${ev.status_id === 6 ? 'art-approved' : ''}">
+      <div class="date">${escapeHtml(ev.date)}</div>
+      <div class="name">${escapeHtml(ev.status_name)}</div>
+    </div>`).join('') + '</div>';
+}
+
+function renderPhotos(kid) {
+  const events = APP.photos[kid] || [];
+  if (!events.length) return '<div class="photos-empty">No completed Onfleet photos found for this kiosk (Sept 2025+). Toggle "Load photo history" in sidebar to enable.</div>';
+  return events.map(ev => {
+    const dt = new Date(ev.dt_iso);
+    const when = isNaN(dt) ? ev.dt_iso : dt.toLocaleDateString() + ' · ' + escapeHtml(ev.task_type || 'Task');
+    const thumbs = ev.ids.map(id =>
+      `<span class="photo-thumb" title="${escapeHtml(when)}${ev.short_id ? ' · #' + escapeHtml(ev.short_id) : ''}">
+         <img class="thumb" src="${photoUrl(id, "100x")}" loading="lazy" />
+         <img class="blowup" src="${photoUrl(id, "800x")}" loading="lazy" />
+       </span>`
+    ).join("");
+    return `<div class="photo-event"><div class="when">${escapeHtml(when)}${ev.short_id ? ` · #${escapeHtml(ev.short_id)}` : ''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${thumbs}</div></div>`;
+  }).join('<div style="width:100%;height:0;"></div>');
+}
+
+function renderArtMockup(r) {
+  function panel(label, url) {
+    if (!url) return `<div class="art-card"><div class="label">${escapeHtml(label)}</div><div class="frame"><span class="nofile">no file</span></div></div>`;
+    const safe = escapeHtml(url);
+    const isPdf = /\.pdf(\?|$)/i.test(url);
+    // Google Docs viewer proxies Terraboost blobs around CSP/iframe restrictions.
+    // Falls back to plain image tag for non-PDF URLs.
+    const viewerUrl = isPdf
+      ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
+      : url;
+    const inner = isPdf
+      ? `<iframe src="${escapeHtml(viewerUrl)}" frameborder="0" loading="lazy"></iframe>`
+      : `<img src="${safe}" style="max-width:100%;max-height:100%;object-fit:contain;" loading="lazy" />`;
+    return `<div class="art-card">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="frame">${inner}</div>
+      <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
+    </div>`;
+  }
+  return `<div class="art-grid">${panel('Approved Top Art', r.art_top_url)}${panel('Approved Bottom Art', r.art_bottom_url)}</div>`;
+}
+
+function renderAssignments(assignments) {
+  if (!assignments.length) return '<div class="muted">No matching Onfleet work order. This kiosk needs a WO created.</div>';
+  return assignments.map(a => {
+    const stateLabel = {0: "Unassigned", 1: "Assigned", 2: "Active"}[a.state] || a.state;
+    return `<div class="assignment">
+      <div><div class="k">WO #</div><div class="v ${a.wo_number ? '' : 'empty'}">${escapeHtml(a.wo_number || '—')}</div></div>
+      <div><div class="k">State</div><div class="v">${escapeHtml(stateLabel)}</div></div>
+      <div><div class="k">Worker</div><div class="v ${a.worker_name ? '' : 'empty'}">${escapeHtml(a.worker_name || (a.worker_id ? '(no name on file)' : '—'))}</div></div>
+      <div><div class="k">Assigned (last modified)</div><div class="v ${a.assigned_at ? '' : 'empty'}">${escapeHtml(a.assigned_at || '—')}</div></div>
+      <div><div class="k">Task Type</div><div class="v">${escapeHtml(a.task_type || '—')}</div></div>
+      <div><div class="k">Route ID</div><div class="v">${escapeHtml(a.short_id || '—')}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRowDrawer(r) {
+  const tags = [];
+  if (r.is_digital) tags.push('<span class="pill installed">Digital</span>');
+  if (r.boosted) tags.push('<span class="pill boosted">Boosted</span>');
+  return `
+    <div class="drawer">
+      <div class="panel">
+        <h3>Current Onfleet Work Order</h3>
+        ${renderAssignments(r.assignments)}
+      </div>
+      <div class="panel">
+        <h3>Status Timeline (Terraboost)</h3>
+        ${renderTimeline(r.timeline, r.art_approved_date)}
+      </div>
+      <div class="panel">
+        <h3>Kiosk Details</h3>
+        <div class="row-info">
+          <div class="li"><div class="k">Reservation</div><div class="v">${escapeHtml(r.reservation_start)} → ${escapeHtml(r.reservation_end)}</div></div>
+          <div class="li"><div class="k">Kiosk Type</div><div class="v">${escapeHtml(r.kiosk_type)} ${tags.join(' ')}</div></div>
+          <div class="li"><div class="k">Art Collection</div><div class="v">${escapeHtml(r.art_collection_name || '—')}</div></div>
+          ${r.art_top_url ? `<div class="li"><div class="k">Top Art</div><div class="v"><a href="${escapeHtml(r.art_top_url)}" target="_blank">Open file ↗</a></div></div>` : ''}
+          ${r.art_bottom_url ? `<div class="li"><div class="k">Bottom Art</div><div class="v"><a href="${escapeHtml(r.art_bottom_url)}" target="_blank">Open file ↗</a></div></div>` : ''}
+          ${r.installed_image_url ? `<div class="li"><div class="k">Installed Image</div><div class="v"><a href="${escapeHtml(r.installed_image_url)}" target="_blank">Open ↗</a></div></div>` : ''}
+        </div>
+      </div>
+      <div class="panel full">
+        <h3>Approved Artwork Mockup (from Terraboost)</h3>
+        ${renderArtMockup(r)}
+      </div>
+      <div class="panel full">
+        <h3>Photo History (hover any thumb for blow-up)</h3>
+        <div class="photos">${renderPhotos(r.kid)}</div>
+      </div>
+    </div>`;
+}
+
+function renderWorkerDrawer(r) {
+  // Lighter than the home-page drawer — skips status timeline + current WO panel
+  // (those are redundant since the worker row already shows worker/WO/state/last-touched).
+  // Focuses on: venue context, art mockup, photo history.
+  const tags = [];
+  if (r.is_digital) tags.push('<span class="pill installed">Digital</span>');
+  if (r.boosted) tags.push('<span class="pill boosted">Boosted</span>');
+  return `
+    <div class="drawer">
+      <div class="panel">
+        <h3>Client & Kiosk</h3>
+        <div class="row-info">
+          <div class="li"><div class="k">Client / Campaign</div><div class="v"><strong>${escapeHtml(r.campaign_name)}</strong></div></div>
+          <div class="li"><div class="k">SIO</div><div class="v">${escapeHtml(r.sio || '—')}</div></div>
+          <div class="li"><div class="k">Terraboost Status</div><div class="v">${escapeHtml(r.current_status || '—')}</div></div>
+          <div class="li"><div class="k">Art approved</div><div class="v">${escapeHtml((r.art_approved_date || '').slice(0,10) || '—')} ${r.days_since_art_approved != null ? `<span class="muted">(${r.days_since_art_approved}d ago)</span>` : ''}</div></div>
+          <div class="li"><div class="k">Venue</div><div class="v">${escapeHtml(r.venue_name)}</div></div>
+          <div class="li"><div class="k">Address</div><div class="v">${escapeHtml(r.venue_address || (r.venue_city + ", " + r.venue_state))}</div></div>
+          <div class="li"><div class="k">KID</div><div class="v"><strong>${escapeHtml(r.kid)}</strong></div></div>
+          <div class="li"><div class="k">Kiosk Type</div><div class="v">${escapeHtml(r.kiosk_type || '—')} ${tags.join(' ')}</div></div>
+          <div class="li"><div class="k">Reservation</div><div class="v">${escapeHtml(r.reservation_start)} → ${escapeHtml(r.reservation_end)}</div></div>
+          <div class="li"><div class="k">Install Date</div><div class="v">${escapeHtml(r.install_date || 'not yet installed')}</div></div>
+          <div class="li"><div class="k">Art Collection</div><div class="v">${escapeHtml(r.art_collection_name || '—')}</div></div>
+        </div>
+      </div>
+      <div class="panel full">
+        <h3>Approved Artwork Mockup</h3>
+        ${renderArtMockup(r)}
+      </div>
+      <div class="panel full">
+        <h3>Photo History (hover any thumb for blow-up)</h3>
+        <div class="photos">${renderPhotos(r.kid)}</div>
+      </div>
+    </div>`;
+}
+
+function render() {
+  let rows = APP.rows.filter(rowMatchesFilter).filter(rowMatchesSearch);
+  rows = sortRows(rows);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('visibleCount').textContent = '0 visible';
+    return;
+  } else {
+    document.getElementById('emptyState').style.display = 'none';
+  }
+  const frag = document.createDocumentFragment();
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const key = rowKey(r);
+    tr.dataset.key = key;
+    if (key === expandedKey) tr.classList.add('expanded');
+    const days = r.days_since_art_approved;
+    const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+    tr.innerHTML = `
+      <td>${pillFor(r.onfleet_state)}${r.install_date ? '<span class="pill installed">installed</span>' : ''}</td>
+      <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
+      <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days}</span></td>
+      <td>${escapeHtml(r.art_approved_date || '—')}</td>
+      <td>${escapeHtml(r.current_status)}</td>
+      <td>${escapeHtml(r.sio)}</td>
+      <td>${escapeHtml(r.campaign_name)}</td>
+      <td><strong>${escapeHtml(r.kid)}</strong></td>
+      <td><div style="font-weight:500;">${escapeHtml(r.venue_name)}</div><div class="muted" style="font-size:11px;line-height:1.3;">${escapeHtml(r.venue_address || (r.venue_city + ", " + r.venue_state))}</div></td>
+      <td>${escapeHtml(r.venue_state)}</td>
+      <td>${escapeHtml(r.install_date || '—')}</td>
+    `;
+    tr.addEventListener('click', () => toggleRow(key));
+    frag.appendChild(tr);
+    if (key === expandedKey) {
+      const drawerTr = document.createElement('tr');
+      drawerTr.className = 'drawer-row';
+      drawerTr.innerHTML = `<td colspan="11">${renderRowDrawer(r)}</td>`;
+      frag.appendChild(drawerTr);
+    }
+  }
+  tbody.appendChild(frag);
+  document.getElementById('visibleCount').textContent = `${rows.length} visible of ${APP.rows.length}`;
+}
+
+function toggleRow(key) {
+  expandedKey = expandedKey === key ? null : key;
+  render();
+  // Scroll the expanded row into view
+  if (expandedKey) {
+    setTimeout(() => {
+      const el = document.querySelector(`tr[data-key="${expandedKey}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+  }
+}
+
+function _openLightbox_unused(img) {  // kept for compat, hover replaces this
+  return;
+  document.getElementById('lb-img').src = photoUrl(img.dataset.id, "800x");
+  document.getElementById('lb-meta').textContent = img.dataset.meta || "";
+  document.getElementById('lightbox').classList.add('show');
+  event.stopPropagation();
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
+
+// Wiring
+for (const c of document.querySelectorAll('.chip:not(.pod-chip)')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.chip:not(.pod-chip)').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activeFilter = c.dataset.filter;
+    expandedKey = null;
+    render();
+  });
+}
+const allPodsChip = document.querySelector('.pod-chip[data-pod="all"]');
+if (allPodsChip) allPodsChip.classList.add('active');
+for (const c of document.querySelectorAll('.pod-chip')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.pod-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activePod = c.dataset.pod;
+    expandedKey = null;
+    render();
+  });
+}
+document.getElementById('search').addEventListener('input', e => { searchText = e.target.value; expandedKey = null; render(); });
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const f = th.dataset.sort;
+    if (sortField === f) sortAsc = !sortAsc; else { sortField = f; sortAsc = true; }
+    document.querySelectorAll('th').forEach(x => x.classList.remove('active'));
+    th.classList.add('active');
+    th.querySelector('.sort-arrow') && (th.querySelector('.sort-arrow').textContent = sortAsc ? '▲' : '▼');
+    render();
+  });
+});
+
+renderKpis();
+render();
+renderWorkersView();
+
+// View switching
+document.querySelectorAll('.view-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const v = t.dataset.view;
+    document.querySelectorAll('.view-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('view-' + v).classList.add('active');
+  });
+});
+
+document.getElementById('workerSearch').addEventListener('input', e => {
+  workerSearchText = e.target.value;
+  renderWorkersView();
+});
+
+
+function renderWorkersView() {
+  // Build flat WO records (one per assignment on a not-installed row)
+  let workerRows = [];
+  for (const r of APP.rows) {
+    if (r.install_date) continue;
+    if (!r.assignments || !r.assignments.length) {
+      workerRows.push({...r, worker_name: '(no worker / unassigned)', worker_id: '', wo_number: '', state_label: 'unassigned', assigned_at: '', short_id: '', task_type: '', _state: 0});
+      continue;
+    }
+    for (const a of r.assignments) {
+      const stateLabel = {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state));
+      workerRows.push({...r, worker_name: a.worker_name || (a.worker_id ? '(no name)' : '(no worker / unassigned)'), worker_id: a.worker_id || '', wo_number: a.wo_number || '', state_label: stateLabel, assigned_at: a.assigned_at || '', short_id: a.short_id || '', task_type: a.task_type || '', _state: a.state});
+    }
+  }
+
+  const f = activeWorkerFilter || 'all-not-installed';
+  const pod = activeWorkerPod || 'all';
+  let filtered = workerRows.filter(r => {
+    if (pod !== 'all' && r.pod !== pod) return false;
+    if (f === 'not-installed-with-worker') return !!r.worker_id;
+    if (f === 'not-installed-no-worker') return !r.worker_id;
+    return true;
+  });
+  if (workerSearchText) {
+    const q = workerSearchText.toLowerCase();
+    filtered = filtered.filter(r => [r.worker_name, r.wo_number, r.kid, r.venue_name, r.venue_address, r.sio, r.campaign_name]
+      .some(v => (v||'').toString().toLowerCase().includes(q)));
+  }
+
+  // Group by worker_name
+  const byWorker = {};
+  for (const r of filtered) {
+    if (!byWorker[r.worker_name]) byWorker[r.worker_name] = [];
+    byWorker[r.worker_name].push(r);
+  }
+  // Sort workers by # WOs desc, then by name
+  const workerNames = Object.keys(byWorker).sort((a,b) => byWorker[b].length - byWorker[a].length || a.localeCompare(b));
+
+  document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
+  document.getElementById('tabBadgeWorkers').textContent = workerNames.length;
+  document.getElementById('workerCount').textContent = `${workerNames.length} workers · ${filtered.length} WOs awaiting install`;
+
+  const list = document.getElementById('workersList');
+  if (!workerNames.length) {
+    list.innerHTML = '<div class="worker-empty">No matching WOs.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  for (const name of workerNames) {
+    const wos = byWorker[name].slice().sort((a,b) => (b.days_since_art_approved||0) - (a.days_since_art_approved||0));
+    const oldest = Math.max(...wos.map(x => x.days_since_art_approved || 0));
+    const stateCounts = wos.reduce((acc, x) => { acc[x.state_label] = (acc[x.state_label]||0) + 1; return acc; }, {});
+    const stateChips = Object.entries(stateCounts).map(([s,n]) => `<span class="pill ${s === 'unassigned' ? 'unassigned' : s === 'assigned' ? 'assigned' : s === 'active' ? 'active' : 'not-onfleet'}">${n} ${escapeHtml(s)}</span>`).join(' ');
+
+    const card = document.createElement('div');
+    card.className = 'worker-card';
+
+    const header = document.createElement('div');
+    header.className = 'worker-header';
+    header.innerHTML = `
+      <h4>${escapeHtml(name)} <span class="wo-count">· ${wos.length} WO${wos.length===1?'':'s'}</span></h4>
+      <div class="stats">
+        ${stateChips}
+        <div class="oldest">oldest art: <strong>${oldest}d</strong></div>
+      </div>`;
+    card.appendChild(header);
+
+    for (let i = 0; i < wos.length; i++) {
+      const r = wos[i];
+      const days = r.days_since_art_approved;
+      const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+      const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
+      const wKey = name + ':' + (r.wo_number || '') + ':' + r.kid + ':' + i;
+
+      const row = document.createElement('div');
+      row.className = 'worker-wo-row' + (wKey === workersExpandedKey ? ' expanded' : '');
+      row.innerHTML = `
+        <div class="wo">${escapeHtml(r.wo_number || '— no WO —')}</div>
+        <div><span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span></div>
+        <div><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></div>
+        <div class="venue-cell">${escapeHtml(r.venue_name)} <span class="muted">· ${escapeHtml(r.kid)} · ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span></div>
+        <div><span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span></div>
+        <div class="muted">${escapeHtml(r.assigned_at || '—')}</div>`;
+      row.addEventListener('click', () => {
+        workersExpandedKey = workersExpandedKey === wKey ? null : wKey;
+        renderWorkersView();
+      });
+      card.appendChild(row);
+
+      if (wKey === workersExpandedKey) {
+        const drawer = document.createElement('div');
+        drawer.style.cssText = 'background: var(--bg); padding: 0;';
+        drawer.innerHTML = renderWorkerDrawer(r);
+        card.appendChild(drawer);
+      }
+    }
+    list.appendChild(card);
+  }
+}
+</script>
+</body>
+</html>
