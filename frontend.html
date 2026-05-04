@@ -175,7 +175,23 @@
   .art-card .open-link { font-size: 11px; color: var(--primary); text-decoration: none; }
   .art-card .open-link:hover { text-decoration: underline; }
 
-  .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; }
+
+  /* Last-visit photo with hover-blowup. The blowup overlays both columns at
+     ~2x card width so the user sees a much larger preview without clicking. */
+  .visit-photo-card { position: relative; width: 100%; height: 100%; cursor: zoom-in;
+    display: flex; align-items: center; justify-content: center; }
+  .visit-photo-card img.thumb { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .visit-photo-card img.blowup {
+    display: none; position: absolute; top: 50%; right: 0;
+    transform: translateY(-50%);
+    width: 210%; max-width: 210%; max-height: 130%;
+    object-fit: contain; background: #ffffff;
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    z-index: 1000; pointer-events: none;
+  }
+  .visit-photo-card:hover img.blowup { display: block; }
 
 
   /* View tabs (Campaigns / Workers) */
@@ -442,39 +458,74 @@ function renderPhotos(kid) {
 }
 
 function renderArtMockup(r) {
-  // Preferred: a single customer-accepted mockup image rendered by Terraboost
-  // (the same one shown on /campaigns/{id}/view-art-design once the customer
-  // marks it Approved). Only show this if it was clearly accepted by the client.
+  // ---- Left card: customer-approved Terraboost mockup ---------------------
+  // Falls back to a small "no approved mockup yet" notice (with links to the
+  // raw top/bottom source files) when nothing has been approved yet.
+  let mockupCard;
   if (r.accepted_mockup_url) {
     const safe = escapeHtml(r.accepted_mockup_url);
-    return `<div class="art-card" style="grid-column: 1 / -1;">
+    mockupCard = `<div class="art-card">
       <div class="label">Customer-Approved Mockup</div>
       <div class="frame" style="height: 520px; background: #ffffff;">
         <img src="${safe}" style="max-width:100%; max-height:100%; object-fit:contain;" loading="lazy" />
       </div>
       <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
     </div>`;
-  }
-  // Fallback: no approved mockup yet — show the raw print-collection top + bottom
-  // panels so the row is still useful (this is the previous behavior).
-  function panel(label, url) {
-    if (!url) return `<div class="art-card"><div class="label">${escapeHtml(label)}</div><div class="frame"><span class="nofile">no file</span></div></div>`;
-    const safe = escapeHtml(url);
-    const isPdf = /\.pdf(\?|$)/i.test(url);
-    const viewerUrl = isPdf
-      ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
-      : url;
-    const inner = isPdf
-      ? `<iframe src="${escapeHtml(viewerUrl)}" frameborder="0" loading="lazy"></iframe>`
-      : `<img src="${safe}" style="max-width:100%;max-height:100%;object-fit:contain;" loading="lazy" />`;
-    return `<div class="art-card">
-      <div class="label">${escapeHtml(label)}</div>
-      <div class="frame">${inner}</div>
-      <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
+  } else {
+    const links = [];
+    if (r.art_top_url) links.push(`<a href="${escapeHtml(r.art_top_url)}" target="_blank" style="color:var(--primary);text-decoration:none;">Top art source file ↗</a>`);
+    if (r.art_bottom_url) links.push(`<a href="${escapeHtml(r.art_bottom_url)}" target="_blank" style="color:var(--primary);text-decoration:none;">Bottom art source file ↗</a>`);
+    mockupCard = `<div class="art-card">
+      <div class="label">Mockup not yet approved</div>
+      <div class="frame" style="height: 520px; background: #ffffff; flex-direction: column; gap: 10px; padding: 20px; text-align: center;">
+        <div style="color:var(--text-muted);font-style:italic;font-size:13px;">No customer-approved mockup on file yet.</div>
+        ${links.length ? '<div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">' + links.join('') + '</div>' : '<div style="color:var(--text-muted);font-size:12px;">(no source files either)</div>'}
+      </div>
     </div>`;
   }
-  const note = `<div style="grid-column:1/-1;font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:6px;">No customer-approved mockup found yet — showing the raw top/bottom files instead.</div>`;
-  return `<div class="art-grid">${note}${panel('Approved Top Art', r.art_top_url)}${panel('Approved Bottom Art', r.art_bottom_url)}</div>`;
+
+  // ---- Right card: most-recent Onfleet completed-task photo ---------------
+  // Hover the photo to see a much larger preview (the blowup spans both
+  // columns of the grid so the user gets a near-full-width view).
+  const events = (APP.photos && APP.photos[r.kid]) || [];
+  let visitCard;
+  if (events.length && (events[0].ids || []).length) {
+    const ev = events[0];
+    const id = ev.ids[0];
+    const dt = new Date(ev.dt_iso);
+    const when = isNaN(dt) ? (ev.dt_iso || 'unknown date') : dt.toLocaleDateString();
+    const taskBit = ev.task_type ? ` · ${escapeHtml(ev.task_type)}` : '';
+    const shortBit = ev.short_id ? ` · #${escapeHtml(ev.short_id)}` : '';
+    const photoCount = (ev.ids || []).length;
+    const moreBit = photoCount > 1 ? ` <span class="muted">(+${photoCount - 1} more in gallery)</span>` : '';
+    const thumbUrl = photoUrl(id, "800x");
+    const thumbFb = photoUrlFallback(id, "800x");
+    const blowupUrl = photoUrl(id, "1600x");
+    const blowupFb = photoUrlFallback(id, "1600x");
+    visitCard = `<div class="art-card">
+      <div class="label">Last Visit Photo · ${escapeHtml(when)}${taskBit}${shortBit}${moreBit}</div>
+      <div class="frame" style="height: 520px; background: #ffffff;">
+        <span class="visit-photo-card" title="Hover to enlarge">
+          <img class="thumb" src="${thumbUrl}" onerror="this.onerror=null;this.src='${thumbFb}';" loading="lazy" />
+          <img class="blowup" src="${blowupUrl}" onerror="this.onerror=null;this.src='${blowupFb}';" loading="lazy" />
+        </span>
+      </div>
+      <a href="${thumbUrl}" target="_blank" class="open-link">Open full size ↗</a>
+    </div>`;
+  } else {
+    const photosLoaded = APP.photos && Object.keys(APP.photos).length > 0;
+    const msg = photosLoaded
+      ? 'No completed-visit photos for this kiosk yet.'
+      : 'Photo history not loaded — click "Load photos now" at the top of the dashboard.';
+    visitCard = `<div class="art-card">
+      <div class="label">Last Visit Photo</div>
+      <div class="frame" style="height: 520px; background: #ffffff;">
+        <span class="nofile">${msg}</span>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="art-grid">${mockupCard}${visitCard}</div>`;
 }
 
 function renderAssignments(assignments) {
