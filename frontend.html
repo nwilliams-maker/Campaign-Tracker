@@ -177,21 +177,7 @@
 
   .art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; }
 
-  /* Last-visit photo with hover-blowup. The blowup overlays both columns at
-     ~2x card width so the user sees a much larger preview without clicking. */
-  .visit-photo-card { position: relative; width: 100%; height: 100%; cursor: zoom-in;
-    display: flex; align-items: center; justify-content: center; }
-  .visit-photo-card img.thumb { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .visit-photo-card img.blowup {
-    display: none; position: absolute; top: 50%; right: 0;
-    transform: translateY(-50%);
-    width: 210%; max-width: 210%; max-height: 130%;
-    object-fit: contain; background: #ffffff;
-    border: 1px solid var(--border); border-radius: 6px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
-    z-index: 1000; pointer-events: none;
-  }
-  .visit-photo-card:hover img.blowup { display: block; }
+
 
 
   /* View tabs (Campaigns / Workers) */
@@ -485,8 +471,6 @@ function renderArtMockup(r) {
   }
 
   // ---- Right card: most-recent Onfleet completed-task photo ---------------
-  // Hover the photo to see a much larger preview (the blowup spans both
-  // columns of the grid so the user gets a near-full-width view).
   const events = (APP.photos && APP.photos[r.kid]) || [];
   let visitCard;
   if (events.length && (events[0].ids || []).length) {
@@ -500,15 +484,11 @@ function renderArtMockup(r) {
     const moreBit = photoCount > 1 ? ` <span class="muted">(+${photoCount - 1} more in gallery)</span>` : '';
     const thumbUrl = photoUrl(id, "800x");
     const thumbFb = photoUrlFallback(id, "800x");
-    const blowupUrl = photoUrl(id, "1600x");
-    const blowupFb = photoUrlFallback(id, "1600x");
     visitCard = `<div class="art-card">
       <div class="label">Last Visit Photo · ${escapeHtml(when)}${taskBit}${shortBit}${moreBit}</div>
       <div class="frame" style="height: 520px; background: #ffffff;">
-        <span class="visit-photo-card" title="Hover to enlarge">
-          <img class="thumb" src="${thumbUrl}" onerror="this.onerror=null;this.src='${thumbFb}';" loading="lazy" />
-          <img class="blowup" src="${blowupUrl}" onerror="this.onerror=null;this.src='${blowupFb}';" loading="lazy" />
-        </span>
+        <img src="${thumbUrl}" onerror="this.onerror=null;this.src='${thumbFb}';"
+             style="max-width:100%; max-height:100%; object-fit:contain;" loading="lazy" />
       </div>
       <a href="${thumbUrl}" target="_blank" class="open-link">Open full size ↗</a>
     </div>`;
@@ -572,17 +552,13 @@ function renderRowDrawer(r) {
         <h3>Customer-Approved Art Mockup</h3>
         ${renderArtMockup(r)}
       </div>
-      <div class="panel full">
-        <h3>Photo History (hover any thumb for blow-up)</h3>
-        <div class="photos">${renderPhotos(r.kid)}</div>
-      </div>
     </div>`;
 }
 
 function renderWorkerDrawer(r) {
   // Lighter than the home-page drawer — skips status timeline + current WO panel
   // (those are redundant since the worker row already shows worker/WO/state/last-touched).
-  // Focuses on: venue context, art mockup, photo history.
+  // Focuses on: venue context, art mockup, last visit photo.
   const tags = [];
   if (r.is_digital) tags.push('<span class="pill installed">Digital</span>');
   if (r.boosted) tags.push('<span class="pill boosted">Boosted</span>');
@@ -621,10 +597,6 @@ function renderWorkerDrawer(r) {
       <div class="panel full">
         <h3>Customer-Approved Art Mockup</h3>
         ${renderArtMockup(r)}
-      </div>
-      <div class="panel full">
-        <h3>Photo History (hover any thumb for blow-up)</h3>
-        <div class="photos">${renderPhotos(r.kid)}</div>
       </div>
     </div>`;
 }
