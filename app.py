@@ -371,6 +371,18 @@ last_refreshed = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 # we have for that KID; otherwise fall back to Onfleet's own customFields.
 kid_to_row = {r["kid"]: r for r in rows if r.get("kid")}
 
+# Collect every KID seen on an Onfleet open task — we'll hydrate venue data
+# for the ones not already in the active-pipeline set so pod/state populate.
+of_kids = set()
+for of_list in (bundle.get("of_by_kid") or {}).values():
+    for t in of_list:
+        cf = data._meta(t)
+        for k in ("kioskId", "kiosk_id", "KioskId", "KID"):
+            if cf.get(k):
+                of_kids.add(str(cf[k]).strip().upper()); break
+missing_kids = tuple(sorted(of_kids - set(kid_to_row.keys())))
+extra_venues = data.fetch_venues_for_kids(missing_kids) if missing_kids else {}
+
 onfleet_workers = []
 seen_task_ids = set()
 for of_list in (bundle.get("of_by_kid") or {}).values():
@@ -398,6 +410,21 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
         except Exception:
             assigned_at = ""
         row = kid_to_row.get(kid, {})
+        # Use Terraboost row first; fall back to extra_venues (looked up directly
+        # by KID); fall back to Onfleet customFields. Re-derive pod from state.
+        v_extra = extra_venues.get(kid, {}) if not row else {}
+        v_state = (row.get("venue_state") or v_extra.get("state") or "").strip().upper()
+        if not v_state:
+            v_state = state_from_address(v_extra.get("address1"), v_extra.get("address2"), f"{v_extra.get('city','')}, {v_extra.get('zip','')}")
+        # Build full address from extra_venues if needed
+        v_addr = row.get("venue_address") or ""
+        if not v_addr and v_extra:
+            parts = [p for p in [v_extra.get("address1"), v_extra.get("address2")] if p]
+            csz = ", ".join(p for p in [v_extra.get("city","") or "", (v_state + (" " + v_extra.get("zip","") if v_extra.get("zip") else "")).strip()] if p.strip(", "))
+            if csz:
+                parts.append(csz)
+            v_addr = ", ".join(parts)
+        v_pod = row.get("pod") or pod_for_state(v_state) or "Other"
         onfleet_workers.append({
             "worker_id": worker_id,
             "worker_name": bundle.get("workers", {}).get(worker_id, "") or "(no name)",
@@ -418,12 +445,12 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
             "current_status": row.get("current_status", ""),
             "art_approved_date": row.get("art_approved_date", ""),
             "days_since_art_approved": row.get("days_since_art_approved"),
-            "venue_name": cf.get("venueName") or row.get("venue_name", ""),
-            "venue_address": row.get("venue_address", ""),
-            "venue_city": row.get("venue_city", ""),
-            "venue_state": row.get("venue_state", ""),
-            "venue_id": cf.get("venueId") or row.get("venue_id", ""),
-            "pod": row.get("pod", "Other"),
+            "venue_name": row.get("venue_name") or v_extra.get("venueName") or cf.get("venueName") or "",
+            "venue_address": v_addr,
+            "venue_city": row.get("venue_city") or v_extra.get("city") or "",
+            "venue_state": v_state,
+            "venue_id": row.get("venue_id") or v_extra.get("id") or cf.get("venueId") or "",
+            "pod": v_pod,
             "kiosk_type": row.get("kiosk_type", ""),
             "is_digital": row.get("is_digital", False),
             "boosted": row.get("boosted", False),
