@@ -684,8 +684,10 @@ document.getElementById('workerSearch').addEventListener('input', e => {
 
 function renderWorkersView() {
   // Build a 4-level tree: Worker -> WO# -> Client(campaign) -> Kiosk
-  // Each leaf = (row × assignment) for a kiosk this worker is on.
+  // Dedupe by KID inside each (worker, wo, client) bucket so multiple Onfleet
+  // tasks for the same kiosk don't inflate the kiosk count.
   const byWorker = {};
+  const seen = {}; // {worker|wo|camp: Set(kid)} — dedupe gate
   for (const r of APP.rows) {
     if (r.install_date) continue;
     if (!r.assignments || !r.assignments.length) continue;
@@ -694,6 +696,11 @@ function renderWorkersView() {
       const name = a.worker_name || '(no name)';
       const woNum = a.wo_number || a.notes || a.short_id || '— no WO —';
       const camp = r.campaign_name || '(no campaign)';
+      const kid = (r.kid || '').toString().toUpperCase();
+      const seenKey = name + '|' + woNum + '|' + camp;
+      if (!seen[seenKey]) seen[seenKey] = new Set();
+      if (kid && seen[seenKey].has(kid)) continue;  // skip duplicate kiosk under same (worker, wo, client)
+      if (kid) seen[seenKey].add(kid);
       if (!byWorker[name]) byWorker[name] = {};
       if (!byWorker[name][woNum]) byWorker[name][woNum] = {};
       if (!byWorker[name][woNum][camp]) byWorker[name][woNum][camp] = [];
