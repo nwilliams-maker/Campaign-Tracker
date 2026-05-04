@@ -683,33 +683,29 @@ document.getElementById('workerSearch').addEventListener('input', e => {
 
 
 function renderWorkersView() {
-  // Build a 4-level tree: Worker -> WO# -> Client(campaign) -> Kiosk
-  // Dedupe by KID inside each (worker, wo, client) bucket so multiple Onfleet
-  // tasks for the same kiosk don't inflate the kiosk count.
+  // Source from Onfleet directly (APP.onfleet_workers) — every open Onfleet task
+  // with a worker, regardless of whether the kiosk is in the active Terraboost set.
+  const source = APP.onfleet_workers || [];
   const byWorker = {};
-  const seen = {}; // {worker|wo|camp: Set(kid)} — dedupe gate
-  for (const r of APP.rows) {
-    if (r.install_date) continue;
-    if (!r.assignments || !r.assignments.length) continue;
-    for (const a of r.assignments) {
-      if (!a.worker_id && !a.worker_name) continue;
-      const name = a.worker_name || '(no name)';
-      const woNum = a.wo_number || a.notes || a.short_id || '— no WO —';
-      const camp = r.campaign_name || '(no campaign)';
-      const kid = (r.kid || '').toString().toUpperCase();
-      const seenKey = name + '|' + woNum + '|' + camp;
-      if (!seen[seenKey]) seen[seenKey] = new Set();
-      if (kid && seen[seenKey].has(kid)) continue;  // skip duplicate kiosk under same (worker, wo, client)
-      if (kid) seen[seenKey].add(kid);
-      if (!byWorker[name]) byWorker[name] = {};
-      if (!byWorker[name][woNum]) byWorker[name][woNum] = {};
-      if (!byWorker[name][woNum][camp]) byWorker[name][woNum][camp] = [];
-      byWorker[name][woNum][camp].push({
-        ...r, ...a,
-        _state: a.state,
-        state_label: {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state)),
-      });
-    }
+  const seen = {}; // dedupe by KID within each (worker, wo, campaign) bucket
+  for (const t of source) {
+    if (t.install_date) continue;  // already installed → skip
+    const name = t.worker_name || '(no name)';
+    const woNum = t.wo_number || t.notes || t.short_id || '— no WO —';
+    const camp = t.campaign_name || '(unknown campaign)';
+    const kid = (t.kid || '').toString().toUpperCase();
+    const seenKey = name + '|' + woNum + '|' + camp;
+    if (!seen[seenKey]) seen[seenKey] = new Set();
+    if (kid && seen[seenKey].has(kid)) continue;
+    if (kid) seen[seenKey].add(kid);
+    if (!byWorker[name]) byWorker[name] = {};
+    if (!byWorker[name][woNum]) byWorker[name][woNum] = {};
+    if (!byWorker[name][woNum][camp]) byWorker[name][woNum][camp] = [];
+    byWorker[name][woNum][camp].push({
+      ...t,
+      _state: t.state,
+      state_label: {0:'unassigned',1:'assigned',2:'active'}[t.state] || (t.state==null?'?':String(t.state)),
+    });
   }
 
   // Apply pod + search filters by removing leaves that don't match
