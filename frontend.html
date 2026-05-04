@@ -312,6 +312,8 @@ let activeWorkerPod = "all";
 let workerSortField = "";
 let workerSortAsc = false;
 let workersExpandedKey = null;
+let visibleCap = 200;        // initial DOM cap for campaign table (huge dataset)
+let workersVisibleCap = 200; // same for workers
 let sortField = "days_since_art_approved";
 let sortAsc = false;
 let expandedKey = null;
@@ -542,8 +544,10 @@ function render() {
   } else {
     document.getElementById('emptyState').style.display = 'none';
   }
+  const totalRows = rows.length;
+  const sliced = rows.slice(0, visibleCap);
   const frag = document.createDocumentFragment();
-  for (const r of rows) {
+  for (const r of sliced) {
     const tr = document.createElement('tr');
     const key = rowKey(r);
     tr.dataset.key = key;
@@ -576,7 +580,10 @@ function render() {
     }
   }
   tbody.appendChild(frag);
-  document.getElementById('visibleCount').textContent = `${rows.length} visible of ${APP.rows.length}`;
+  const showing = Math.min(visibleCap, totalRows);
+  document.getElementById('visibleCount').innerHTML = `${showing} of ${totalRows} shown` + (showing < totalRows ? ` <button id="loadMoreBtn" style="margin-left:8px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer;">Show 200 more</button>` + ` <button id="showAllBtn" style="margin-left:4px;padding:3px 10px;border-radius:4px;background:transparent;color:var(--primary);border:1px solid var(--primary);font-size:11px;font-weight:600;cursor:pointer;">Show all ${totalRows}</button>` : '');
+  const lm = document.getElementById('loadMoreBtn'); if (lm) lm.addEventListener('click', e => { e.stopPropagation(); visibleCap += 200; render(); });
+  const sa = document.getElementById('showAllBtn'); if (sa) sa.addEventListener('click', e => { e.stopPropagation(); visibleCap = totalRows; render(); });
 }
 
 function toggleRow(key) {
@@ -607,6 +614,7 @@ for (const c of document.querySelectorAll('.chip:not(.pod-chip)')) {
     c.classList.add('active');
     activeFilter = c.dataset.filter;
     expandedKey = null;
+    visibleCap = 200;
     render();
   });
 }
@@ -618,10 +626,11 @@ for (const c of document.querySelectorAll('.pod-chip')) {
     c.classList.add('active');
     activePod = c.dataset.pod;
     expandedKey = null;
+    visibleCap = 200;
     render();
   });
 }
-document.getElementById('search').addEventListener('input', e => { searchText = e.target.value; expandedKey = null; render(); });
+document.getElementById('search').addEventListener('input', e => { searchText = e.target.value; expandedKey = null; visibleCap = 200; render(); });
 document.querySelectorAll('th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
     const f = th.dataset.sort;
@@ -650,6 +659,7 @@ document.querySelectorAll('.view-tab').forEach(t => {
 
 document.getElementById('workerSearch').addEventListener('input', e => {
   workerSearchText = e.target.value;
+  workersVisibleCap = 200;
   renderWorkersView();
 });
 
@@ -705,17 +715,24 @@ function renderWorkersView() {
   const uniqueWorkers = new Set(filtered.map(r => r.worker_name)).size;
   document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
   document.getElementById('tabBadgeWorkers').textContent = uniqueWorkers;
-  document.getElementById('workerCount').textContent = `${uniqueWorkers} workers · ${filtered.length} WOs awaiting install`;
+  const wShowing = Math.min(workersVisibleCap, filtered.length);
+  document.getElementById('workerCount').innerHTML = `${uniqueWorkers} workers · ${wShowing} of ${filtered.length} WOs shown` + (wShowing < filtered.length ? ` <button id="wLoadMoreBtn" style="margin-left:8px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer;">Show 200 more</button>` + ` <button id="wShowAllBtn" style="margin-left:4px;padding:3px 10px;border-radius:4px;background:transparent;color:var(--primary);border:1px solid var(--primary);font-size:11px;font-weight:600;cursor:pointer;">Show all ${filtered.length}</button>` : '');
+  setTimeout(() => {
+    const wlm = document.getElementById('wLoadMoreBtn'); if (wlm) wlm.addEventListener('click', e => { e.stopPropagation(); workersVisibleCap += 200; renderWorkersView(); });
+    const wsa = document.getElementById('wShowAllBtn'); if (wsa) wsa.addEventListener('click', e => { e.stopPropagation(); workersVisibleCap = filtered.length; renderWorkersView(); });
+  }, 0);
 
   const tbody = document.getElementById('workersTbody');
   const empty = document.getElementById('workersEmpty');
   if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
+  const wTotal = filtered.length;
+  const wSliced = filtered.slice(0, workersVisibleCap);
   const frag = document.createDocumentFragment();
   let lastWorker = null;
-  for (let i = 0; i < filtered.length; i++) {
-    const r = filtered[i];
+  for (let i = 0; i < wSliced.length; i++) {
+    const r = wSliced[i];
     const days = r.days_since_art_approved;
     const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
     const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
