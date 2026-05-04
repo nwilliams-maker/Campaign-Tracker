@@ -329,6 +329,7 @@ let workersExpandedKey = null;
 let wExpandedWorker = null;
 let wExpandedWO = null;
 let wExpandedClient = null;
+let wExpandedKid = null;
 let visibleCap = 200;        // initial DOM cap for campaign table (huge dataset)
 let workersVisibleCap = 200; // same for workers
 let sortField = "days_since_art_approved";
@@ -682,7 +683,8 @@ document.getElementById('workerSearch').addEventListener('input', e => {
 
 
 function renderWorkersView() {
-  // Build {workerName: [wos]} where each entry is one assignment merged with its row
+  // Build a 4-level tree: Worker -> WO# -> Client(campaign) -> Kiosk
+  // Each leaf = (row × assignment) for a kiosk this worker is on.
   const byWorker = {};
   for (const r of APP.rows) {
     if (r.install_date) continue;
@@ -690,124 +692,170 @@ function renderWorkersView() {
     for (const a of r.assignments) {
       if (!a.worker_id && !a.worker_name) continue;
       const name = a.worker_name || '(no name)';
-      if (!byWorker[name]) byWorker[name] = [];
-      byWorker[name].push({...r, ...a, _state: a.state, state_label: {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state))});
+      const woNum = a.wo_number || a.notes || a.short_id || '— no WO —';
+      const camp = r.campaign_name || '(no campaign)';
+      if (!byWorker[name]) byWorker[name] = {};
+      if (!byWorker[name][woNum]) byWorker[name][woNum] = {};
+      if (!byWorker[name][woNum][camp]) byWorker[name][woNum][camp] = [];
+      byWorker[name][woNum][camp].push({
+        ...r, ...a,
+        _state: a.state,
+        state_label: {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state)),
+      });
     }
   }
+
+  // Apply pod + search filters by removing leaves that don't match
   const pod = activeWorkerPod || 'all';
   const q = (workerSearchText || '').toLowerCase();
-  const workers = [];
+  function matchesLeaf(leaf, workerName) {
+    if (pod !== 'all' && leaf.pod !== pod) return false;
+    if (!q) return true;
+    return [workerName, leaf.wo_number, leaf.kid, leaf.venue_name, leaf.sio, leaf.campaign_name, leaf.venue_address]
+      .some(v => (v||'').toString().toLowerCase().includes(q));
+  }
+  const workersOut = [];
   for (const [name, wos] of Object.entries(byWorker)) {
-    let kept = wos;
-    if (pod !== 'all') kept = kept.filter(w => w.pod === pod);
-    if (q) kept = kept.filter(w => [name, w.wo_number, w.kid, w.venue_name, w.sio, w.campaign_name]
-      .some(v => (v||'').toString().toLowerCase().includes(q)));
-    if (kept.length) {
-      kept.sort((a,b) => (b.days_since_art_approved||0) - (a.days_since_art_approved||0));
-      workers.push({name, wos: kept});
+    const woGroups = [];
+    for (const [woNum, clients] of Object.entries(wos)) {
+      const clientGroups = [];
+      for (const [camp, leaves] of Object.entries(clients)) {
+        const kept = leaves.filter(l => matchesLeaf(l, name));
+        if (kept.length) {
+          kept.sort((a,b) => (b.days_since_art_approved||0) - (a.days_since_art_approved||0));
+          clientGroups.push({campaign: camp, kiosks: kept});
+        }
+      }
+      if (clientGroups.length) {
+        clientGroups.sort((a,b) => b.kiosks.length - a.kiosks.length);
+        const totalKiosks = clientGroups.reduce((s,c) => s + c.kiosks.length, 0);
+        woGroups.push({wo: woNum, clients: clientGroups, kioskCount: totalKiosks});
+      }
+    }
+    if (woGroups.length) {
+      woGroups.sort((a,b) => b.kioskCount - a.kioskCount);
+      const totalKiosks = woGroups.reduce((s,w) => s + w.kioskCount, 0);
+      workersOut.push({name, wos: woGroups, woCount: woGroups.length, kioskCount: totalKiosks});
     }
   }
-  workers.sort((a,b) => b.wos.length - a.wos.length || a.name.localeCompare(b.name));
+  workersOut.sort((a,b) => b.kioskCount - a.kioskCount || a.name.localeCompare(b.name));
 
   document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
-  document.getElementById('tabBadgeWorkers').textContent = workers.length;
-  const totalWOs = workers.reduce((s,w) => s + w.wos.length, 0);
-  document.getElementById('workerCount').textContent = `${workers.length} workers · ${totalWOs} WOs awaiting install`;
+  document.getElementById('tabBadgeWorkers').textContent = workersOut.length;
+  const totalKiosks = workersOut.reduce((s,w) => s + w.kioskCount, 0);
+  document.getElementById('workerCount').textContent = `${workersOut.length} workers · ${totalKiosks} kiosks awaiting install`;
 
   const list = document.getElementById('workersList');
-  if (!workers.length) { list.innerHTML = '<div class="empty-state">No matching workers.</div>'; return; }
-
+  if (!workersOut.length) { list.innerHTML = '<div class="empty-state">No matching workers.</div>'; return; }
   list.innerHTML = '';
-  for (const w of workers) {
+
+  for (const w of workersOut) {
     const card = document.createElement('div');
     card.className = 'w-row' + (wExpandedWorker === w.name ? ' expanded' : '');
-    const oldest = Math.max(...w.wos.map(x => x.days_since_art_approved || 0));
+    const oldest = Math.max(...w.wos.flatMap(g => g.clients.flatMap(c => c.kiosks.map(k => k.days_since_art_approved || 0))));
     card.innerHTML = `
       <div class="row-line">
         <span class="chev">▶</span>
         <span class="name">${escapeHtml(w.name)}</span>
-        <span class="count">· ${w.wos.length} WO${w.wos.length===1?'':'s'} awaiting install</span>
+        <span class="count">· ${w.woCount} WO${w.woCount===1?'':'s'} · ${w.kioskCount} kiosk${w.kioskCount===1?'':'s'} awaiting install</span>
         <span class="right">oldest art: <strong>${oldest}d</strong></span>
       </div>
     `;
     card.querySelector('.row-line').addEventListener('click', () => {
       wExpandedWorker = (wExpandedWorker === w.name) ? null : w.name;
-      wExpandedWO = null;
-      wExpandedClient = null;
+      wExpandedWO = null; wExpandedClient = null; wExpandedKid = null;
       renderWorkersView();
     });
+
     if (wExpandedWorker === w.name) {
       const woList = document.createElement('div');
       woList.className = 'wo-list';
-      for (let i = 0; i < w.wos.length; i++) {
-        const r = w.wos[i];
-        const wKey = w.name + '|' + (r.wo_number || '') + '|' + r.kid + '|' + i;
-        const days = r.days_since_art_approved;
-        const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
-        const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
+      for (const wog of w.wos) {
+        const woKey = w.name + '|' + wog.wo;
         const wo = document.createElement('div');
-        wo.className = 'wo-row' + (wExpandedWO === wKey ? ' expanded' : '');
+        wo.className = 'wo-row' + (wExpandedWO === woKey ? ' expanded' : '');
         wo.innerHTML = `
           <div class="row-line">
             <span class="chev">▶</span>
-            <span class="wo-num">${escapeHtml(r.wo_number || r.notes || r.short_id || '— no WO —')}</span>
-            <span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span>
-            <span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span>
-            <span class="right"><span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span> · due ${escapeHtml(r.due_date || '—')}</span>
+            <span class="wo-num">${escapeHtml(wog.wo)}</span>
+            <span class="count">· ${wog.clients.length} client${wog.clients.length===1?'':'s'} · ${wog.kioskCount} kiosk${wog.kioskCount===1?'':'s'}</span>
           </div>
         `;
         wo.querySelector('.row-line').addEventListener('click', e => {
           e.stopPropagation();
-          wExpandedWO = (wExpandedWO === wKey) ? null : wKey;
-          wExpandedClient = null;
+          wExpandedWO = (wExpandedWO === woKey) ? null : woKey;
+          wExpandedClient = null; wExpandedKid = null;
           renderWorkersView();
         });
-        if (wExpandedWO === wKey) {
+
+        if (wExpandedWO === woKey) {
           const clientList = document.createElement('div');
           clientList.className = 'client-list';
-          const clientKey = wKey + '|c';
-          const cli = document.createElement('div');
-          cli.className = 'client-row' + (wExpandedClient === clientKey ? ' expanded' : '');
-          cli.innerHTML = `
-            <span class="client-name">${escapeHtml(r.campaign_name || '(no campaign)')}</span>
-            <span class="meta">SIO ${escapeHtml(r.sio || '—')}</span>
-            <span class="meta">· ${escapeHtml(r.venue_name)} · KID ${escapeHtml(r.kid)}</span>
-            <span class="meta">· ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span>
-            <span class="meta">· Status: ${escapeHtml(r.current_status || '—')}</span>
-            <span class="right" style="margin-left:auto;color:var(--primary);font-weight:600;">→ click for full details</span>
-          `;
-          cli.addEventListener('click', e => {
-            e.stopPropagation();
-            wExpandedClient = (wExpandedClient === clientKey) ? null : clientKey;
-            renderWorkersView();
-          });
-          clientList.appendChild(cli);
-          if (wExpandedClient === clientKey) {
-            const drawer = document.createElement('div');
-            drawer.style.cssText = 'background: var(--bg); border: 1px solid var(--primary); border-radius: 6px; margin: 6px 0;';
-            // Build a row variant scoped to JUST this worker's assignment for this client.
-            // The original r came from `{...row, ...a}` so r.assignments still holds ALL workers'
-            // assignments — replace it with only this worker's so the drawer's "Current Onfleet
-            // Work Order" panel doesn't show other workers' WOs for the same kiosk.
-            const onlyThisWorkerAssignment = {
-              wo_number: r.wo_number || '',
-              task_type: r.task_type || '',
-              short_id: r.short_id || '',
-              state: r._state,
-              worker_id: r.worker_id || '',
-              worker_name: r.worker_name || '',
-              assigned_at: r.assigned_at || '',
-              complete_after: r.complete_after || 0,
-              complete_before: r.complete_before || 0,
-              notes: r.notes || '',
-              container_type: r.container_type || '',
-              tracking_url: r.tracking_url || '',
-              due_date: r.due_date || '',
-              pay_per_task: r.pay_per_task || '',
-            };
-            const scopedRow = {...r, assignments: [onlyThisWorkerAssignment]};
-            drawer.innerHTML = renderRowDrawer(scopedRow);
-            clientList.appendChild(drawer);
+          for (const cg of wog.clients) {
+            const clientKey = woKey + '|' + cg.campaign;
+            const cli = document.createElement('div');
+            cli.className = 'client-row' + (wExpandedClient === clientKey ? ' expanded' : '');
+            const sio = cg.kiosks[0] && cg.kiosks[0].sio || '';
+            cli.innerHTML = `
+              <span style="color:var(--text-muted);">▶</span>
+              <span class="client-name">${escapeHtml(cg.campaign)}</span>
+              <span class="meta">SIO ${escapeHtml(sio || '—')}</span>
+              <span class="meta">· ${cg.kiosks.length} kiosk${cg.kiosks.length===1?'':'s'}</span>
+            `;
+            cli.addEventListener('click', e => {
+              e.stopPropagation();
+              wExpandedClient = (wExpandedClient === clientKey) ? null : clientKey;
+              wExpandedKid = null;
+              renderWorkersView();
+            });
+            clientList.appendChild(cli);
+
+            if (wExpandedClient === clientKey) {
+              const kidList = document.createElement('div');
+              kidList.style.cssText = 'padding: 4px 14px 14px 32px; background: var(--bg);';
+              for (const r of cg.kiosks) {
+                const kidKey = clientKey + '|' + r.kid;
+                const days = r.days_since_art_approved;
+                const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+                const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
+                const kRow = document.createElement('div');
+                kRow.className = 'client-row' + (wExpandedKid === kidKey ? ' expanded' : '');
+                kRow.innerHTML = `
+                  <span style="color:var(--text-muted);">▶</span>
+                  <span style="font-weight:700;color:var(--text);">KID ${escapeHtml(r.kid)}</span>
+                  <span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span>
+                  <span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span>
+                  <span class="meta">${escapeHtml(r.venue_name)}</span>
+                  <span class="meta">· ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span>
+                  <span class="meta">· <span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span></span>
+                  <span class="meta">· due ${escapeHtml(r.due_date || '—')}</span>
+                `;
+                kRow.addEventListener('click', e => {
+                  e.stopPropagation();
+                  wExpandedKid = (wExpandedKid === kidKey) ? null : kidKey;
+                  renderWorkersView();
+                });
+                kidList.appendChild(kRow);
+
+                if (wExpandedKid === kidKey) {
+                  const drawer = document.createElement('div');
+                  drawer.style.cssText = 'background: var(--bg); border: 1px solid var(--primary); border-radius: 6px; margin: 6px 0;';
+                  // Scope assignments to ONLY this worker's WO so the drawer's Onfleet panel doesn't show other workers
+                  const onlyThis = {
+                    wo_number: r.wo_number || '', task_type: r.task_type || '', short_id: r.short_id || '',
+                    state: r._state, worker_id: r.worker_id || '', worker_name: r.worker_name || '',
+                    assigned_at: r.assigned_at || '', complete_after: r.complete_after || 0,
+                    complete_before: r.complete_before || 0, notes: r.notes || '',
+                    container_type: r.container_type || '', tracking_url: r.tracking_url || '',
+                    due_date: r.due_date || '', pay_per_task: r.pay_per_task || '',
+                  };
+                  const scopedRow = {...r, assignments: [onlyThis]};
+                  drawer.innerHTML = renderRowDrawer(scopedRow);
+                  kidList.appendChild(drawer);
+                }
+              }
+              clientList.appendChild(kidList);
+            }
           }
           wo.appendChild(clientList);
         }
