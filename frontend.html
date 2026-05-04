@@ -442,12 +442,25 @@ function renderPhotos(kid) {
 }
 
 function renderArtMockup(r) {
+  // Preferred: a single customer-accepted mockup image rendered by Terraboost
+  // (the same one shown on /campaigns/{id}/view-art-design once the customer
+  // marks it Approved). Only show this if it was clearly accepted by the client.
+  if (r.accepted_mockup_url) {
+    const safe = escapeHtml(r.accepted_mockup_url);
+    return `<div class="art-card" style="grid-column: 1 / -1;">
+      <div class="label">Customer-Approved Mockup</div>
+      <div class="frame" style="height: 520px; background: #ffffff;">
+        <img src="${safe}" style="max-width:100%; max-height:100%; object-fit:contain;" loading="lazy" />
+      </div>
+      <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
+    </div>`;
+  }
+  // Fallback: no approved mockup yet — show the raw print-collection top + bottom
+  // panels so the row is still useful (this is the previous behavior).
   function panel(label, url) {
     if (!url) return `<div class="art-card"><div class="label">${escapeHtml(label)}</div><div class="frame"><span class="nofile">no file</span></div></div>`;
     const safe = escapeHtml(url);
     const isPdf = /\.pdf(\?|$)/i.test(url);
-    // Google Docs viewer proxies Terraboost blobs around CSP/iframe restrictions.
-    // Falls back to plain image tag for non-PDF URLs.
     const viewerUrl = isPdf
       ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
       : url;
@@ -460,7 +473,8 @@ function renderArtMockup(r) {
       <a href="${safe}" target="_blank" class="open-link">Open full size ↗</a>
     </div>`;
   }
-  return `<div class="art-grid">${panel('Approved Top Art', r.art_top_url)}${panel('Approved Bottom Art', r.art_bottom_url)}</div>`;
+  const note = `<div style="grid-column:1/-1;font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:6px;">No customer-approved mockup found yet — showing the raw top/bottom files instead.</div>`;
+  return `<div class="art-grid">${note}${panel('Approved Top Art', r.art_top_url)}${panel('Approved Bottom Art', r.art_bottom_url)}</div>`;
 }
 
 function renderAssignments(assignments) {
@@ -504,7 +518,7 @@ function renderRowDrawer(r) {
         </div>
       </div>
       <div class="panel full">
-        <h3>Approved Artwork Mockup (from Terraboost)</h3>
+        <h3>Customer-Approved Art Mockup</h3>
         ${renderArtMockup(r)}
       </div>
       <div class="panel full">
@@ -554,7 +568,7 @@ function renderWorkerDrawer(r) {
         </div>
       </div>
       <div class="panel full">
-        <h3>Approved Artwork Mockup</h3>
+        <h3>Customer-Approved Art Mockup</h3>
         ${renderArtMockup(r)}
       </div>
       <div class="panel full">
