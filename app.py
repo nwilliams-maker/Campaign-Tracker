@@ -123,6 +123,10 @@ def _load_bundle():
         of_by_sio = data.index_open_tasks_by_sio(open_tasks)
         st.write(f"✓ {len(open_tasks)} open Onfleet tasks · {len(workers)} workers in directory")
 
+        status.update(label="[6.5/7] Fetching customer-approved art mockups...")
+        approved_mockups = data.fetch_approved_mockups(cids)
+        st.write(f"✓ {len(approved_mockups)} campaigns with a customer-approved mockup")
+
         # Step 7 (photo history) is OPT-IN — too slow for first load.
         # Toggle the sidebar checkbox to enable it for the next refresh.
         if st.session_state.get("load_photos", False):
@@ -154,6 +158,7 @@ def _load_bundle():
         "of_by_sio": of_by_sio,
         "workers": workers,
         "photos_by_kid": photos_by_kid,
+        "approved_mockups": approved_mockups,
         "open_task_count": len(open_tasks),
         "completed_task_count": len(completed),
     }
@@ -170,6 +175,7 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
     all_logs = bundle["all_logs"]
     kiosks_by_cid = bundle["kiosks_by_cid"]
     photos_by_kid = bundle["photos_by_kid"]
+    approved_mockups = bundle.get("approved_mockups") or {}
 
     rows = []
     skipped_tests = 0
@@ -302,6 +308,7 @@ def build_rows(bundle: dict) -> tuple[list, dict]:
                 "art_collection_name": pc.get("collectionName") or "",
                 "art_top_url": pc.get("topFileUrl") or "",
                 "art_bottom_url": pc.get("bottomFileUrl") or "",
+                "accepted_mockup_url": approved_mockups.get(cid, ""),
                 "onfleet_state": onfleet_state,
                 "onfleet_match_kind": match_kind,
                 "assignments": assignments,
@@ -471,6 +478,7 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
             "art_collection_name": row.get("art_collection_name", ""),
             "art_top_url": row.get("art_top_url", ""),
             "art_bottom_url": row.get("art_bottom_url", ""),
+            "accepted_mockup_url": row.get("accepted_mockup_url", ""),
             "timeline": row.get("timeline", []),
         })
 
