@@ -828,6 +828,7 @@ function renderWorkersView() {
                   <span style="font-weight:700;color:var(--text);">KID ${escapeHtml(r.kid)}</span>
                   <span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span>
                   <span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span>
+                  ${r.venue_state ? `<span style="font-weight:600;color:var(--text);font-size:11px;background:var(--surface-hover);padding:1px 6px;border-radius:3px;">${escapeHtml(r.venue_state)}</span>` : ''}
                   <span class="meta">${escapeHtml(r.venue_name)}</span>
                   <span class="meta">· ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span>
                   <span class="meta">· <span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span></span>
