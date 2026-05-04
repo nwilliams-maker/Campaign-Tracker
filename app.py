@@ -395,14 +395,10 @@ for of_list in (bundle.get("of_by_kid") or {}).values():
         if not worker_id:
             continue
         cf = data._meta(t)
-        kid = ""
-        for k in ("kioskId", "kiosk_id", "KioskId", "KID"):
-            if cf.get(k):
-                kid = str(cf[k]).strip().upper(); break
-        sio = ""
-        for k in ("sio", "SIO", "Order Number"):
-            if cf.get(k):
-                sio = str(cf[k]).strip().upper(); break
+        # Use the canonical normalized lookup helpers so any casing/spacing
+        # variant of "kioskId" (e.g. "Kiosk ID", "KIOSK_ID") resolves correctly.
+        kid = data._kid_of(t)
+        sio = data._sio_of(t)
         ts = t.get("timeLastModified") or t.get("timeCreated") or 0
         try:
             assigned_at = datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if ts else ""
