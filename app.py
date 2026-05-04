@@ -364,9 +364,83 @@ installed_n = sum(1 for r in rows if r["install_date"])
 last_refreshed = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 # --- Render the entire UI as one HTML component for full styling control -----
+
+# Build an Onfleet-sourced flat list for the By Worker tab. Every open Onfleet
+# task with a worker gets one entry, regardless of whether its kioskId maps to
+# an active-pipeline Terraboost campaign. Enrich with whatever Terraboost data
+# we have for that KID; otherwise fall back to Onfleet's own customFields.
+kid_to_row = {r["kid"]: r for r in rows if r.get("kid")}
+
+onfleet_workers = []
+seen_task_ids = set()
+for of_list in (bundle.get("of_by_kid") or {}).values():
+    for t in of_list:
+        tid = t.get("id") or ""
+        if tid and tid in seen_task_ids:
+            continue
+        if tid:
+            seen_task_ids.add(tid)
+        worker_id = t.get("worker") or ""
+        if not worker_id:
+            continue
+        cf = data._meta(t)
+        kid = ""
+        for k in ("kioskId", "kiosk_id", "KioskId", "KID"):
+            if cf.get(k):
+                kid = str(cf[k]).strip().upper(); break
+        sio = ""
+        for k in ("sio", "SIO", "Order Number"):
+            if cf.get(k):
+                sio = str(cf[k]).strip().upper(); break
+        ts = t.get("timeLastModified") or t.get("timeCreated") or 0
+        try:
+            assigned_at = datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if ts else ""
+        except Exception:
+            assigned_at = ""
+        row = kid_to_row.get(kid, {})
+        onfleet_workers.append({
+            "worker_id": worker_id,
+            "worker_name": bundle.get("workers", {}).get(worker_id, "") or "(no name)",
+            "wo_number": cf.get("WO_NAME") or cf.get("woNumber") or cf.get("WO Number") or "",
+            "task_type": cf.get("taskType") or cf.get("Task Type") or "",
+            "short_id": t.get("shortId") or "",
+            "task_id": tid,
+            "state": t.get("state"),
+            "assigned_at": assigned_at,
+            "due_date": cf.get("DUE_DATE") or "",
+            "pay_per_task": cf.get("PAY_PER_TASK") or "",
+            "notes": t.get("notes") or "",
+            "tracking_url": t.get("trackingURL") or "",
+            "kid": kid,
+            "sio": sio or row.get("sio", ""),
+            "campaign_name": row.get("campaign_name", "") or cf.get("client_company") or "(not in Terraboost active set)",
+            "campaign_id": row.get("campaign_id"),
+            "current_status": row.get("current_status", ""),
+            "art_approved_date": row.get("art_approved_date", ""),
+            "days_since_art_approved": row.get("days_since_art_approved"),
+            "venue_name": cf.get("venueName") or row.get("venue_name", ""),
+            "venue_address": row.get("venue_address", ""),
+            "venue_city": row.get("venue_city", ""),
+            "venue_state": row.get("venue_state", ""),
+            "venue_id": cf.get("venueId") or row.get("venue_id", ""),
+            "pod": row.get("pod", "Other"),
+            "kiosk_type": row.get("kiosk_type", ""),
+            "is_digital": row.get("is_digital", False),
+            "boosted": row.get("boosted", False),
+            "reservation_start": row.get("reservation_start", ""),
+            "reservation_end": row.get("reservation_end", ""),
+            "install_date": row.get("install_date", ""),
+            "installed_image_url": row.get("installed_image_url", ""),
+            "art_collection_name": row.get("art_collection_name", ""),
+            "art_top_url": row.get("art_top_url", ""),
+            "art_bottom_url": row.get("art_bottom_url", ""),
+            "timeline": row.get("timeline", []),
+        })
+
 INITIAL_DATA = {
     "rows": rows,
     "photos": photos_by_kid,
+    "onfleet_workers": onfleet_workers,
     "kpis": {
         "total": total,
         "not_in_of": not_in_of,
