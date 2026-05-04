@@ -193,6 +193,32 @@
 
 
 
+  /* Workers tab — 3-level drill-down */
+  .w-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); cursor: pointer; transition: background 0.1s; }
+  .w-row:hover { background: var(--surface-hover); }
+  .w-row.expanded { background: var(--primary-tint); }
+  .w-row .row-line { padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .w-row .chev { color: var(--text-muted); font-size: 12px; transition: transform 0.15s; }
+  .w-row.expanded > .row-line .chev { transform: rotate(90deg); }
+  .w-row .name { font-weight: 700; font-size: 14px; color: var(--text); }
+  .w-row .count { color: var(--text-secondary); font-size: 12px; }
+  .w-row .right { margin-left: auto; display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text-secondary); }
+
+  .wo-list { padding: 4px 16px 12px 40px; }
+  .wo-row { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; }
+  .wo-row:hover { background: var(--surface-hover); }
+  .wo-row.expanded { background: #fff; border-color: var(--primary); }
+  .wo-row > .row-line { padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .wo-row .wo-num { font-weight: 600; color: var(--text); }
+  .wo-row.expanded > .row-line .chev { transform: rotate(90deg); }
+
+  .client-list { padding: 4px 14px 14px 32px; background: var(--bg); }
+  .client-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .client-row:hover { background: var(--surface-hover); }
+  .client-row.expanded { background: #fff; border-color: var(--primary); }
+  .client-row .client-name { font-weight: 600; color: var(--primary); text-decoration: underline; }
+  .client-row .meta { color: var(--text-secondary); font-size: 12px; }
+
   .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
 </style>
 </head>
@@ -278,25 +304,8 @@
       <span class="visible-count" id="workerCount"></span>
     </div>
 
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th data-wsort="worker_name">Worker</th>
-            <th data-wsort="wo_number">WO #</th>
-            <th data-wsort="state_label">State</th>
-            <th data-wsort="pod">Pod</th>
-            <th data-wsort="days_since_art_approved" class="num">Art age</th>
-            <th data-wsort="due_date">Due</th>
-            <th data-wsort="venue_name">Venue</th>
-            <th data-wsort="assigned_at">Last touched</th>
-          </tr>
-        </thead>
-        <tbody id="workersTbody"></tbody>
-      </table>
-      <div id="workersEmpty" class="empty-state" style="display:none;">No matching WOs.</div>
-    </div>
-  </div></div>
+    <div id="workersList"></div>
+  </div>
 
 <script>
 const APP = __APP_DATA__;
@@ -312,6 +321,9 @@ let activeWorkerPod = "all";
 let workerSortField = "";
 let workerSortAsc = false;
 let workersExpandedKey = null;
+let wExpandedWorker = null;
+let wExpandedWO = null;
+let wExpandedClient = null;
 let visibleCap = 200;        // initial DOM cap for campaign table (huge dataset)
 let workersVisibleCap = 200; // same for workers
 let sortField = "days_since_art_approved";
@@ -665,107 +677,120 @@ document.getElementById('workerSearch').addEventListener('input', e => {
 
 
 function renderWorkersView() {
-  // Build flat WO records — ONLY rows that actually have a worker assigned.
-  // Skip rows where install_date is set (already done) and skip unassigned WOs.
-  let workerRows = [];
+  // Build {workerName: [wos]} where each entry is one assignment merged with its row
+  const byWorker = {};
   for (const r of APP.rows) {
     if (r.install_date) continue;
-    if (!r.assignments || !r.assignments.length) continue;  // skip rows with no Onfleet WO
+    if (!r.assignments || !r.assignments.length) continue;
     for (const a of r.assignments) {
-      if (!a.worker_id && !a.worker_name) continue;  // skip unassigned WOs
-      const stateLabel = {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state));
-      workerRows.push({
-        ...r,
-        worker_name: a.worker_name || '(no name on file)',
-        worker_id: a.worker_id || '',
-        wo_number: a.wo_number || '',
-        state_label: stateLabel,
-        assigned_at: a.assigned_at || '',
-        short_id: a.short_id || '',
-        task_type: a.task_type || '',
-        _state: a.state,
-      });
+      if (!a.worker_id && !a.worker_name) continue;
+      const name = a.worker_name || '(no name)';
+      if (!byWorker[name]) byWorker[name] = [];
+      byWorker[name].push({...r, ...a, _state: a.state, state_label: {0:'unassigned',1:'assigned',2:'active'}[a.state] || (a.state==null?'?':String(a.state))});
     }
   }
-
   const pod = activeWorkerPod || 'all';
-  let filtered = workerRows.filter(r => pod === 'all' || r.pod === pod);
-  if (workerSearchText) {
-    const q = workerSearchText.toLowerCase();
-    filtered = filtered.filter(r => [r.worker_name, r.wo_number, r.kid, r.venue_name, r.venue_address, r.sio, r.campaign_name]
+  const q = (workerSearchText || '').toLowerCase();
+  const workers = [];
+  for (const [name, wos] of Object.entries(byWorker)) {
+    let kept = wos;
+    if (pod !== 'all') kept = kept.filter(w => w.pod === pod);
+    if (q) kept = kept.filter(w => [name, w.wo_number, w.kid, w.venue_name, w.sio, w.campaign_name]
       .some(v => (v||'').toString().toLowerCase().includes(q)));
+    if (kept.length) {
+      kept.sort((a,b) => (b.days_since_art_approved||0) - (a.days_since_art_approved||0));
+      workers.push({name, wos: kept});
+    }
   }
-  if (workerSortField) {
-    filtered = filtered.slice().sort((a,b) => {
-      let av = a[workerSortField], bv = b[workerSortField];
-      if (av == null) av = workerSortField === 'days_since_art_approved' ? -Infinity : '';
-      if (bv == null) bv = workerSortField === 'days_since_art_approved' ? -Infinity : '';
-      if (typeof av === 'number' || typeof bv === 'number') { av = +av || 0; bv = +bv || 0; }
-      else { av = (av||'').toString().toLowerCase(); bv = (bv||'').toString().toLowerCase(); }
-      return av < bv ? (workerSortAsc ? -1 : 1) : av > bv ? (workerSortAsc ? 1 : -1) : 0;
-    });
-  } else {
-    // default: by worker name, then oldest art-approved
-    filtered.sort((a,b) =>
-      a.worker_name.localeCompare(b.worker_name)
-      || ((b.days_since_art_approved||0) - (a.days_since_art_approved||0))
-    );
-  }
+  workers.sort((a,b) => b.wos.length - a.wos.length || a.name.localeCompare(b.name));
 
-  const uniqueWorkers = new Set(filtered.map(r => r.worker_name)).size;
   document.getElementById('tabBadgeCampaigns').textContent = APP.rows.length;
-  document.getElementById('tabBadgeWorkers').textContent = uniqueWorkers;
-  const wShowing = Math.min(workersVisibleCap, filtered.length);
-  document.getElementById('workerCount').innerHTML = `${uniqueWorkers} workers · ${wShowing} of ${filtered.length} WOs shown` + (wShowing < filtered.length ? ` <button id="wLoadMoreBtn" style="margin-left:8px;padding:3px 10px;border-radius:4px;background:var(--primary);color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer;">Show 200 more</button>` + ` <button id="wShowAllBtn" style="margin-left:4px;padding:3px 10px;border-radius:4px;background:transparent;color:var(--primary);border:1px solid var(--primary);font-size:11px;font-weight:600;cursor:pointer;">Show all ${filtered.length}</button>` : '');
-  setTimeout(() => {
-    const wlm = document.getElementById('wLoadMoreBtn'); if (wlm) wlm.addEventListener('click', e => { e.stopPropagation(); workersVisibleCap += 200; renderWorkersView(); });
-    const wsa = document.getElementById('wShowAllBtn'); if (wsa) wsa.addEventListener('click', e => { e.stopPropagation(); workersVisibleCap = filtered.length; renderWorkersView(); });
-  }, 0);
+  document.getElementById('tabBadgeWorkers').textContent = workers.length;
+  const totalWOs = workers.reduce((s,w) => s + w.wos.length, 0);
+  document.getElementById('workerCount').textContent = `${workers.length} workers · ${totalWOs} WOs awaiting install`;
 
-  const tbody = document.getElementById('workersTbody');
-  const empty = document.getElementById('workersEmpty');
-  if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
+  const list = document.getElementById('workersList');
+  if (!workers.length) { list.innerHTML = '<div class="empty-state">No matching workers.</div>'; return; }
 
-  const wTotal = filtered.length;
-  const wSliced = filtered.slice(0, workersVisibleCap);
-  const frag = document.createDocumentFragment();
-  let lastWorker = null;
-  for (let i = 0; i < wSliced.length; i++) {
-    const r = wSliced[i];
-    const days = r.days_since_art_approved;
-    const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
-    const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
-    const wKey = r.worker_name + ':' + (r.wo_number || '') + ':' + r.kid + ':' + i;
-    const showName = r.worker_name !== lastWorker;
-    lastWorker = r.worker_name;
-
-    const tr = document.createElement('tr');
-    if (wKey === workersExpandedKey) tr.classList.add('expanded');
-    tr.innerHTML = `
-      <td>${showName ? `<strong>${escapeHtml(r.worker_name)}</strong>` : `<span class="muted" style="opacity:0.4;">${escapeHtml(r.worker_name)}</span>`}</td>
-      <td><strong>${escapeHtml(r.wo_number || r.notes || r.short_id || '— no WO —')}</strong></td>
-      <td><span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span></td>
-      <td><span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span></td>
-      <td class="num"><span class="days ${daysCls}">${days == null ? '—' : days + 'd'}</span></td>
-      <td>${escapeHtml(r.due_date || '—')}</td>
-      <td><div>${escapeHtml(r.venue_name)} <span class="muted">· ${escapeHtml(r.kid)}</span></div><div class="muted" style="font-size:11px;">${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</div></td>
-      <td>${escapeHtml(r.assigned_at || '—')}</td>
+  list.innerHTML = '';
+  for (const w of workers) {
+    const card = document.createElement('div');
+    card.className = 'w-row' + (wExpandedWorker === w.name ? ' expanded' : '');
+    const oldest = Math.max(...w.wos.map(x => x.days_since_art_approved || 0));
+    card.innerHTML = `
+      <div class="row-line">
+        <span class="chev">▶</span>
+        <span class="name">${escapeHtml(w.name)}</span>
+        <span class="count">· ${w.wos.length} WO${w.wos.length===1?'':'s'} awaiting install</span>
+        <span class="right">oldest art: <strong>${oldest}d</strong></span>
+      </div>
     `;
-    tr.addEventListener('click', () => {
-      workersExpandedKey = workersExpandedKey === wKey ? null : wKey;
+    card.querySelector('.row-line').addEventListener('click', () => {
+      wExpandedWorker = (wExpandedWorker === w.name) ? null : w.name;
+      wExpandedWO = null;
+      wExpandedClient = null;
       renderWorkersView();
     });
-    frag.appendChild(tr);
-    if (wKey === workersExpandedKey) {
-      const drawerTr = document.createElement('tr');
-      drawerTr.className = 'drawer-row';
-      drawerTr.innerHTML = `<td colspan="8">${renderWorkerDrawer(r)}</td>`;
-      frag.appendChild(drawerTr);
+    if (wExpandedWorker === w.name) {
+      const woList = document.createElement('div');
+      woList.className = 'wo-list';
+      for (let i = 0; i < w.wos.length; i++) {
+        const r = w.wos[i];
+        const wKey = w.name + '|' + (r.wo_number || '') + '|' + r.kid + '|' + i;
+        const days = r.days_since_art_approved;
+        const daysCls = days == null ? '' : days >= 60 ? 'alert' : days >= 30 ? 'warn' : '';
+        const stateCls = r.state_label === 'unassigned' ? 'unassigned' : r.state_label === 'assigned' ? 'assigned' : r.state_label === 'active' ? 'active' : 'not-onfleet';
+        const wo = document.createElement('div');
+        wo.className = 'wo-row' + (wExpandedWO === wKey ? ' expanded' : '');
+        wo.innerHTML = `
+          <div class="row-line">
+            <span class="chev">▶</span>
+            <span class="wo-num">${escapeHtml(r.wo_number || r.notes || r.short_id || '— no WO —')}</span>
+            <span class="pill ${stateCls}">${escapeHtml(r.state_label)}</span>
+            <span class="pod-pill pod-${r.pod || 'Other'}">${escapeHtml(r.pod || 'Other')}</span>
+            <span class="right"><span class="days ${daysCls}">${days == null ? '—' : days + 'd art'}</span> · due ${escapeHtml(r.due_date || '—')}</span>
+          </div>
+        `;
+        wo.querySelector('.row-line').addEventListener('click', e => {
+          e.stopPropagation();
+          wExpandedWO = (wExpandedWO === wKey) ? null : wKey;
+          wExpandedClient = null;
+          renderWorkersView();
+        });
+        if (wExpandedWO === wKey) {
+          const clientList = document.createElement('div');
+          clientList.className = 'client-list';
+          const clientKey = wKey + '|c';
+          const cli = document.createElement('div');
+          cli.className = 'client-row' + (wExpandedClient === clientKey ? ' expanded' : '');
+          cli.innerHTML = `
+            <span class="client-name">${escapeHtml(r.campaign_name || '(no campaign)')}</span>
+            <span class="meta">SIO ${escapeHtml(r.sio || '—')}</span>
+            <span class="meta">· ${escapeHtml(r.venue_name)} · KID ${escapeHtml(r.kid)}</span>
+            <span class="meta">· ${escapeHtml(r.venue_address || (r.venue_city + ', ' + r.venue_state))}</span>
+            <span class="meta">· Status: ${escapeHtml(r.current_status || '—')}</span>
+            <span class="right" style="margin-left:auto;color:var(--primary);font-weight:600;">→ click for full details</span>
+          `;
+          cli.addEventListener('click', e => {
+            e.stopPropagation();
+            wExpandedClient = (wExpandedClient === clientKey) ? null : clientKey;
+            renderWorkersView();
+          });
+          clientList.appendChild(cli);
+          if (wExpandedClient === clientKey) {
+            const drawer = document.createElement('div');
+            drawer.style.cssText = 'background: var(--bg); border: 1px solid var(--primary); border-radius: 6px; margin: 6px 0;';
+            drawer.innerHTML = renderRowDrawer(r);
+            clientList.appendChild(drawer);
+          }
+          wo.appendChild(clientList);
+        }
+        woList.appendChild(wo);
+      }
+      card.appendChild(woList);
     }
+    list.appendChild(card);
   }
-  tbody.innerHTML = '';
-  tbody.appendChild(frag);
 }
 </script>
 </body>
