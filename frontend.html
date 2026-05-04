@@ -260,6 +260,10 @@
     <span class="chip pod-chip" data-pod="Orange" style="border-color:#ea580c;color:#ea580c;">Orange</span>
     <span class="chip pod-chip" data-pod="Purple" style="border-color:#9333ea;color:#9333ea;">Purple</span>
     <span class="chip pod-chip" data-pod="Red" style="border-color:#dc2626;color:#dc2626;">Red</span>
+    <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <span class="chip type-chip active" data-type="all">All Types</span>
+    <span class="chip type-chip" data-type="National">National</span>
+    <span class="chip type-chip" data-type="Local">Local</span>
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="text" id="search" placeholder="Search SIO, campaign, KID, venue, worker..." />
@@ -302,6 +306,10 @@
       <span class="chip pod-w-chip" data-pod="Orange" style="border-color:#ea580c;color:#ea580c;">Orange</span>
       <span class="chip pod-w-chip" data-pod="Purple" style="border-color:#9333ea;color:#9333ea;">Purple</span>
       <span class="chip pod-w-chip" data-pod="Red" style="border-color:#dc2626;color:#dc2626;">Red</span>
+      <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+      <span class="chip type-w-chip active" data-type="all">All Types</span>
+      <span class="chip type-w-chip" data-type="National">National</span>
+      <span class="chip type-w-chip" data-type="Local">Local</span>
       <div class="search-wrap">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="workerSearch" placeholder="Search worker / WO / KID / venue / SIO..." />
@@ -314,11 +322,16 @@
 
 <script>
 const APP = __APP_DATA__;
-const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.png";
+// Onfleet photo CDN — modern Onfleet stores JPGs at this CloudFront path
+const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.jpg";
+const PHOTO_URL_FALLBACK = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.png";
 function photoUrl(id, size) { return PHOTO_URL_TEMPLATE.replace("{id}", id).replace("{size}", size || "100x"); }
+function photoUrlFallback(id, size) { return PHOTO_URL_FALLBACK.replace("{id}", id).replace("{size}", size || "100x"); }
 
 let activeFilter = "all";
 let activePod = "all";
+let activeType = "all";
+let activeWorkerType = "all";
 let searchText = "";
 let workerSearchText = "";
 let activeWorkerFilter = "all-not-installed";
@@ -367,6 +380,7 @@ function pillFor(state) {
 
 function rowMatchesFilter(r) {
   if (activePod !== "all" && r.pod !== activePod) return false;
+  if (activeType !== "all" && r.customer_type !== activeType) return false;
   if (activeFilter === "needs-attention") return r.onfleet_state === "NOT_IN_ONFLEET";
   if (activeFilter === "unassigned") return r.onfleet_state === "unassigned";
   if (activeFilter === "assigned") return r.onfleet_state === "assigned";
@@ -419,8 +433,8 @@ function renderPhotos(kid) {
     const when = isNaN(dt) ? ev.dt_iso : dt.toLocaleDateString() + ' · ' + escapeHtml(ev.task_type || 'Task');
     const thumbs = ev.ids.map(id =>
       `<span class="photo-thumb" title="${escapeHtml(when)}${ev.short_id ? ' · #' + escapeHtml(ev.short_id) : ''}">
-         <img class="thumb" src="${photoUrl(id, "100x")}" loading="lazy" />
-         <img class="blowup" src="${photoUrl(id, "800x")}" loading="lazy" />
+         <img class="thumb" src="${photoUrl(id, "100x")}" onerror="this.onerror=null;this.src='${photoUrlFallback(id, "100x")}';" loading="lazy" />
+         <img class="blowup" src="${photoUrl(id, "800x")}" onerror="this.onerror=null;this.src='${photoUrlFallback(id, "800x")}';" loading="lazy" />
        </span>`
     ).join("");
     return `<div class="photo-event"><div class="when">${escapeHtml(when)}${ev.short_id ? ` · #${escapeHtml(ev.short_id)}` : ''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${thumbs}</div></div>`;
@@ -648,6 +662,29 @@ for (const c of document.querySelectorAll('.pod-chip')) {
     render();
   });
 }
+
+// Campaigns tab — National/Local type chips
+for (const c of document.querySelectorAll('.type-chip')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.type-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activeType = c.dataset.type;
+    expandedKey = null;
+    visibleCap = 200;
+    render();
+  });
+}
+
+// Worker tab — National/Local type chips
+for (const c of document.querySelectorAll('.type-w-chip')) {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.type-w-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    activeWorkerType = c.dataset.type;
+    renderWorkersView();
+  });
+}
+
 document.getElementById('search').addEventListener('input', e => { searchText = e.target.value; expandedKey = null; visibleCap = 200; render(); });
 document.querySelectorAll('th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -690,6 +727,7 @@ function renderWorkersView() {
   const seen = {}; // dedupe by KID within each (worker, wo, campaign) bucket
   for (const t of source) {
     if (t.install_date) continue;  // already installed → skip
+    if (activeWorkerType !== "all" && t.customer_type !== activeWorkerType) continue;
     const name = t.worker_name || '(no name)';
     const woNum = t.wo_number || t.notes || t.short_id || '— no WO —';
     const camp = t.campaign_name || '(unknown campaign)';
