@@ -60,8 +60,12 @@
   .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
   .visible-count { color: var(--text-secondary); font-size: 12px; margin-left: auto; font-weight: 500; }
 
-  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-  table { width: 100%; border-collapse: collapse; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; overflow-y: visible; box-shadow: 0 1px 2px rgba(0,0,0,0.04); -webkit-overflow-scrolling: touch; }
+  .table-wrap::-webkit-scrollbar { height: 10px; }
+  .table-wrap::-webkit-scrollbar-track { background: var(--surface-hover); }
+  .table-wrap::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 5px; }
+  .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+  table { width: 100%; border-collapse: collapse; min-width: 1400px; }
   thead th { background: var(--surface-hover); color: var(--text-secondary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
   thead th:hover { color: var(--primary); }
   thead th .sort-arrow { display: inline-block; opacity: 0.4; margin-left: 4px; font-size: 9px; }
@@ -194,10 +198,10 @@
 
 
   /* Workers tab — 3-level drill-down */
-  .w-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); cursor: pointer; transition: background 0.1s; }
+  .w-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); cursor: pointer; transition: background 0.1s; overflow-x: auto; }
   .w-row:hover { background: var(--surface-hover); }
   .w-row.expanded { background: var(--primary-tint); }
-  .w-row .row-line { padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .w-row .row-line { padding: 12px 16px; display: flex; align-items: center; gap: 12px; min-width: max-content; }
   .w-row .chev { color: var(--text-muted); font-size: 12px; transition: transform 0.15s; }
   .w-row.expanded > .row-line .chev { transform: rotate(90deg); }
   .w-row .name { font-weight: 700; font-size: 14px; color: var(--text); }
@@ -205,15 +209,16 @@
   .w-row .right { margin-left: auto; display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text-secondary); }
 
   .wo-list { padding: 4px 16px 12px 40px; }
-  .wo-row { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; }
+  .wo-row { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; overflow-x: auto; }
   .wo-row:hover { background: var(--surface-hover); }
   .wo-row.expanded { background: #fff; border-color: var(--primary); }
-  .wo-row > .row-line { padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .wo-row > .row-line { padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: max-content; }
   .wo-row .wo-num { font-weight: 600; color: var(--text); }
   .wo-row.expanded > .row-line .chev { transform: rotate(90deg); }
 
   .client-list { padding: 4px 14px 14px 32px; background: var(--bg); }
-  .client-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .client-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; overflow-x: auto; font-size: 13px; min-width: 0; }
+  .client-row > * { white-space: nowrap; flex-shrink: 0; }
   .client-row:hover { background: var(--surface-hover); }
   .client-row.expanded { background: #fff; border-color: var(--primary); }
   .client-row .client-name { font-weight: 600; color: var(--primary); text-decoration: underline; }
@@ -780,7 +785,28 @@ function renderWorkersView() {
           if (wExpandedClient === clientKey) {
             const drawer = document.createElement('div');
             drawer.style.cssText = 'background: var(--bg); border: 1px solid var(--primary); border-radius: 6px; margin: 6px 0;';
-            drawer.innerHTML = renderRowDrawer(r);
+            // Build a row variant scoped to JUST this worker's assignment for this client.
+            // The original r came from `{...row, ...a}` so r.assignments still holds ALL workers'
+            // assignments — replace it with only this worker's so the drawer's "Current Onfleet
+            // Work Order" panel doesn't show other workers' WOs for the same kiosk.
+            const onlyThisWorkerAssignment = {
+              wo_number: r.wo_number || '',
+              task_type: r.task_type || '',
+              short_id: r.short_id || '',
+              state: r._state,
+              worker_id: r.worker_id || '',
+              worker_name: r.worker_name || '',
+              assigned_at: r.assigned_at || '',
+              complete_after: r.complete_after || 0,
+              complete_before: r.complete_before || 0,
+              notes: r.notes || '',
+              container_type: r.container_type || '',
+              tracking_url: r.tracking_url || '',
+              due_date: r.due_date || '',
+              pay_per_task: r.pay_per_task || '',
+            };
+            const scopedRow = {...r, assignments: [onlyThisWorkerAssignment]};
+            drawer.innerHTML = renderRowDrawer(scopedRow);
             clientList.appendChild(drawer);
           }
           wo.appendChild(clientList);
