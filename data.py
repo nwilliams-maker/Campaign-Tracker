@@ -143,6 +143,27 @@ Q_CAMPAIGN_KIOSKS = """query CK($cids: [Int!]) {
   }
 }"""
 
+# Customer-accepted mockup. Mirrors what the view-art-design page renders:
+#   campaignArt(campaignId) -> [campaignArtFile{ fileUrl, artProofStatus{id} }]
+# artProofStatus.id == 65 means "Approved" (the customer accepted the proof).
+# Other statuses we ignore: 64 = Example (template), 66 = Rejected.
+# We also restrict to image extensions; the same campaignArtFiles list also returns
+# source assets (.ai/.eps/.pdf) which are NOT the rendered mockup we want to show.
+APPROVED_PROOF_STATUS_ID = 65
+_MOCKUP_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+Q_APPROVED_MOCKUPS = """query ApprovedMockups($cids: [Int!]) {
+  campaignArt(where: {campaignId: {in: $cids}}) {
+    id
+    campaignId
+    campaignArtFiles {
+      id
+      fileUrl
+      createDate
+      artProofStatus { id statusName }
+    }
+  }
+}"""
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_status_names() -> dict:
@@ -242,6 +263,46 @@ def fetch_kiosks_for_campaigns(campaign_ids: tuple, batch: int = 50) -> dict:
                 existing = kiosk.get("venue") or {}
                 if not existing.get("venueName"):
                     kiosk["venue"] = venue_by_kid[kk]
+    return out
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_approved_mockups(campaign_ids: tuple, batch: int = 100) -> dict:
+    """Returns {campaignId: approved_mockup_url} — the customer-accepted Terraboost
+    mockup image, one per campaign. We pick the most recent file with
+    artProofStatus.id == 65 (Approved) AND an image extension. Campaigns without
+    any approved mockup are simply absent from the dict."""
+    if not campaign_ids:
+        return {}
+    token = _tb_login()
+    out: dict = {}
+    cids = list(campaign_ids)
+    for i in range(0, len(cids), batch):
+        chunk = cids[i:i + batch]
+        data = _tb_query(token, Q_APPROVED_MOCKUPS, {"cids": chunk})
+        for ca in data.get("campaignArt") or []:
+            cid = ca.get("campaignId")
+            if cid is None:
+                continue
+            best_dt = ""
+            best_url = ""
+            for f in ca.get("campaignArtFiles") or []:
+                ps = f.get("artProofStatus") or {}
+                if ps.get("id") != APPROVED_PROOF_STATUS_ID:
+                    continue
+                url = (f.get("fileUrl") or "").strip()
+                if not url:
+                    continue
+                # Match extension, ignoring querystring (S3 sometimes appends auth params)
+                base = url.split("?", 1)[0].lower()
+                if not base.endswith(_MOCKUP_IMAGE_EXTS):
+                    continue
+                cd = f.get("createDate") or ""
+                if cd > best_dt:
+                    best_dt = cd
+                    best_url = url
+            if best_url:
+                out[cid] = best_url
     return out
 
 
