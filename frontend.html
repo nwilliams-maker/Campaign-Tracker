@@ -295,24 +295,10 @@
       <span class="visible-count" id="workerCount"></span>
     </div>
 
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th data-wsort="wo_number">Work Order</th>
-            <th data-wsort="state_label">State</th>
-            <th data-wsort="worker_name">Worker</th>
-            <th data-wsort="pod">Pod</th>
-            <th data-wsort="days_since_art_approved" class="num">Art age</th>
-            <th data-wsort="venue_name">Venue</th>
-            <th data-wsort="assigned_at">Last touched</th>
-          </tr>
-        </thead>
-        <tbody id="workersTbody"></tbody>
-      </table>
-      <div id="workersEmpty" class="empty-state" style="display:none;">No matching WOs.</div>
-    </div>
-  </div><script>
+    <div id="workersList"></div>
+  </div>
+
+<script>
 const APP = __APP_DATA__;
 const PHOTO_URL_TEMPLATE = "https://d15p8tr8p0vffz.cloudfront.net/{id}/{size}.png";
 function photoUrl(id, size) { return PHOTO_URL_TEMPLATE.replace("{id}", id).replace("{size}", size || "100x"); }
